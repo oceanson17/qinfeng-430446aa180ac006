@@ -2780,7 +2780,7 @@ AI.system=function(){
  +'規則：\n1. 一律使用繁體中文，古風、簡練、有畫面感；每幕約120-260字，可含NPC對白（用「」）。人物性格須符合其已知性格與當前關係數值（信任/好感/懷疑/恨意/愛慕/忠誠/恐懼/敬重）。\n'
  +'2. 只輸出一個JSON物件，不要Markdown、不要任何額外文字。\n'
  +'3. JSON格式：{"scene":"場景敘述與對話","speaker":"主要說話NPC的id，無則空字串","bg":"palace|chamber|garden|market|gate|water|study|battle|wild|prison|inn|tea|pharm|cloth|home之一",'
- +'"choices":[{"text":"選項文字(28字內)","fx":{}}],"fx":{},"effects":[],"intent":null}\n'
+ +'"choices":[{"text":"選項文字(28字內)","fx":{}}],"fx":{},"effects":[],"recap":"本幕一句話概述(30字內)","intent":null}\n'
  +'4. fx欄位皆可省略：{"st":{"wu":0,"zhi":0,"zheng":0,"mei":0,"tong":0,"rep":0,"stealth":0,"gold":0,"hp":0,"merit":0},"rel":{"npc_id":{"tr":0,"af":0,"su":0,"ha":0,"lo":0,"ly":0,"fe":0,"re":0}},"mem":{"npc_id":"該人物對此事的記憶短句"},"sus":[["a_id","b_id",數值]],"flags":{"自訂鍵":true},"days":天數,"news":"一句天下傳聞"}\n'
  +'數值上限：st每項±3（金錢±150、健康±15），rel每項±10，sus±20，days≤30。npc_id只能使用【人物】中提供的id。\n'
  +'5. choices 給出3到4個有意義且各異的選項（含謀略、武力、感情、退讓等方向），每個可附小幅fx。\n'
@@ -2895,6 +2895,7 @@ AI.validate=function(j,need){
  if(typeof t!=='string'||t.length<8)throw {kind:'schema'};
  var out={scene:t.replace(/^\s+|\s+$/g,''),speaker:(NPC[j.speaker]?j.speaker:''),bg:(THEMES[j.bg]?j.bg:''),choices:[],fx:AI.cleanFx(j.fx),intent:null};
  out.effects=[];try{if(window.Facts)out.effects=Facts.cleanEffects(j.effects||j.facts||[]);}catch(e){out.effects=[];}
+ out.recap=typeof j.recap==='string'?j.recap.replace(/\s+/g,' ').slice(0,60):'';
  if(j.choices&&j.choices.length){for(var i=0;i<j.choices.length&&out.choices.length<5;i++){var c=j.choices[i];if(!c)continue;var tx=typeof c==='string'?c:(c.text||c.label);if(typeof tx!=='string'||!tx)continue;out.choices.push({text:tx.slice(0,40),fx:AI.cleanFx(c.fx)});}}
  if(need==='choices'&&out.choices.length<2)throw {kind:'schema'};
  var it=j.intent;
@@ -2945,6 +2946,7 @@ AI.run=function(a){
  return rq.then(function(r){
   S.ai.fails=0;
   var sc;
+  if(window.Facts){r=Facts.preAI(r,a);}   /* 知識防火牆：洩密檢查（改寫或丟 leak）＋ 隱蔽事件的 fx 過濾 */
   if(a.type==='polish'){
    var orig=a.scene;var fxline='';var m=(orig.t||'').match(/\n*(〔[^〕]*〕)\s*$/);if(m)fxline='\n\n'+m[1];
    var head=(orig.t||'').match(/^【[^】]+】/);
@@ -2952,10 +2954,11 @@ AI.run=function(a){
    if(r.choices.length&&SET.aiMode==='full'&&orig.kind!=='menu'&&orig.kind!=='hub'){
     for(var i=0;i<Math.min(2,r.choices.length);i++){sc.ch.splice(sc.ch.length-(orig.ch.length>1?1:0),0,{t:'✦ '+r.choices[i].text,go:'aiNext',a:{text:r.choices[i].text},fx:r.choices[i].fx,ai:1});}
    }
+   if(window.Facts){try{var pf=Facts.postAI(r,a);if(pf&&pf.lines.length)sc.t+='\n〔秘辛・'+pf.lines.join('　')+'〕';}catch(e){if(window.console)console.error('Facts polish',e);}}
    return sc;
   }
   if(r.fx)applyFx(r.fx,'ai');
-  var fres=null;if(r.effects&&r.effects.length&&window.Facts){try{fres=Facts.ingest(r.effects,{src:'ai'});}catch(e){if(window.console)console.error('Facts ai',e);}}
+  var fres=null;if(window.Facts){try{fres=Facts.postAI(r,a);}catch(e){if(window.console)console.error('Facts ai',e);}}
   var ch0=[];
   if(r.intent){var it=r.intent;
    if(it.type==='assassinate')ch0.push(ch('⚔ 付諸行動：刺殺'+nm(it.target),'assTarget',{id:it.target}));
@@ -8718,6 +8721,7 @@ AI.judgeRun=function(a){
    var j=AI.extractJSON(res.text);var v=null;
    try{v=spec.check(j,a);}catch(e){v=null;}
    if(!v){if(!retry)return once(true);throw {kind:'schema'};}
+   if(window.Facts){Facts.preJudge(v,j);}
    return v;
   },function(e){if(e&&e.kind==='http'&&e.status>=500&&!retry)return once(true);throw e;});
  };
@@ -8726,6 +8730,7 @@ AI.judgeRun=function(a){
   var args={};for(var k in a.args)args[k]=a.args[k];args.ai=v;
   var sc=NODES[a.node](args);
   if(sc&&typeof sc==='object')sc.ai=1;
+  if(window.Facts&&sc&&sc.t){try{Facts.postJudge(v,a,sc);}catch(e){if(window.console)console.error('Facts judge',e);}}
   return sc;
  });
 };
@@ -14248,11 +14253,11 @@ var World={};
   var w=W();var m=curM();if(w.ai.m===m)return;w.ai.m=m;
   var evs=w.ev.filter(function(e){return S.day-e.d<32&&e.lines&&e.lines.length&&alive(e.a)&&(!e.b||alive(e.b));}).sort(function(a,b){return b.imp-a.imp;}).slice(0,Math.min(4,2+n));
   if(!evs.length)return;
-  var msgs=[{role:'system',content:'你是《秦風》的世界記錄者。只輸出單一JSON，不要其他文字。繁體中文，戰國末年語氣，每句台詞不超過40字。\n'+(Canon.RULES||'')},
-   {role:'user',content:(Canon.block?Canon.block(true):'')+'\n\n【本月NPC重點事件】請替每件事重寫2–4句人物台詞（人物不可是已故者），並可附一句其中一人的內心想法。\n'+evs.map(function(e){return e.i+'｜'+e.t+'｜人物id:'+[e.a,e.b,e.c].filter(Boolean).join(',');}).join('\n')+'\n\n輸出格式：{"ev":[{"i":事件編號,"lines":[{"s":"人物id","t":"台詞"}],"th":{"s":"人物id","t":"內心想法"}}]}'}];
+  var msgs=[{role:'system',content:'你是《秦風》的世界記錄者。只輸出單一JSON，不要其他文字。繁體中文，戰國末年語氣，每句台詞不超過40字。\n'+(Canon.RULES||'')+(window.Facts?Facts.RULES_BATCH:'')},
+   {role:'user',content:(Canon.block?Canon.block(true):'')+(window.Facts?'\n'+Facts.firewall():'')+'\n\n【本月NPC重點事件】請替每件事重寫2–4句人物台詞（人物不可是已故者），並可附一句其中一人的內心想法。\n'+evs.map(function(e){return e.i+'｜'+e.t+'｜人物id:'+[e.a,e.b,e.c].filter(Boolean).join(',');}).join('\n')+'\n\n輸出格式：{"ev":[{"i":事件編號,"lines":[{"s":"人物id","t":"台詞"}],"th":{"s":"人物id","t":"內心想法"}}]}'}];
   AI.call(msgs,{maxTok:900}).then(function(res){var j=AI.extractJSON(res.text);if(!j||!j.ev||!j.ev.length)return;
    j.ev.forEach(function(o){var e=null;for(var i=0;i<w.ev.length;i++)if(w.ev[i].i===o.i)e=w.ev[i];if(!e||!o.lines)return;var ls=[];
-    o.lines.forEach(function(l){if(l&&l.s&&NPC[l.s]&&alive(l.s)&&typeof l.t==='string'&&l.t.length>1&&l.t.length<90)ls.push([l.s,nm(l.s)+'：「'+l.t.replace(/[「」]/g,'')+'」']);});
+    o.lines.forEach(function(l){if(l&&l.s&&NPC[l.s]&&alive(l.s)&&typeof l.t==='string'&&l.t.length>1&&l.t.length<90&&!(window.Facts&&Facts.leakLine(l.s,l.t)))ls.push([l.s,nm(l.s)+'：「'+l.t.replace(/[「」]/g,'')+'」']);});
     if(ls.length>=2){e.lines=ls;e.ai=1;}
     if(o.th&&o.th.s&&NPC[o.th.s]&&alive(o.th.s)&&typeof o.th.t==='string'&&o.th.t.length<80)w.thoughts[o.th.s]={d:S.day,t:o.th.t};});
   },function(){});};
@@ -15543,7 +15548,7 @@ var Facts={};
 (function(){
  var TYPES={secret:'秘密',identity:'身世',relationship:'關係',status:'處境',item:'物證',event:'事件'};
  var KINS={parent:'親生父母',child:'親生子女',sibling:'手足',spouse:'夫妻',lover:'私情',master:'師徒',enemy:'死敵',other:'其他'};
- Facts.TYPES=TYPES;
+ Facts.TYPES=TYPES;Facts.stat={witDrop:0,leakFix:0,leakRej:0,fxDrop:0};
  function F(){var x=S.x;if(!x.facts)x.facts={ver:1,list:[],seq:1,log:[],pend:[],goal:{},hush:{},cnt:{learn:0,react:0,chain:0},obsN:0};return x.facts;}
  Facts.F=F;
  function nmx(id){return id==='p'?S.p.name:(NPC[id]?NPC[id].n:'某人');}
@@ -15569,6 +15574,7 @@ var Facts={};
   if(!v)return '';if(v==='p'||v==='player'||v==='玩家'||v==='我'||v===S.p.name)return 'p';
   if(NPC[v])return v;for(var i=0;i<NPCS.length;i++){if(NPCS[i].n===v||NPCS[i].c===v)return NPCS[i].id;}return '';
  }
+ Facts.resolve=resolveId;
  /* ---------- 正規化（AI 與離線解析共用的格式）---------- */
  Facts.norm=function(e){
   if(!e||typeof e!=='object'||Array.isArray(e))return null;
@@ -15582,6 +15588,11 @@ var Facts={};
   o.truth=e.truth===false||e.truth===0?0:1;
   o.kn=[];var kb=e.knownBy||e.kn||[];if(!Array.isArray(kb))kb=[kb];
   for(var i=0;i<kb.length&&o.kn.length<6;i++){var id=resolveId(kb[i]);if(id&&o.kn.indexOf(id)<0)o.kn.push(id);}
+  o.nk=[];var nb=e.notKnownBy||e.nk||[];if(!Array.isArray(nb))nb=[nb];
+  for(i=0;i<nb.length&&o.nk.length<6;i++){var nid=resolveId(nb[i]);if(nid&&nid!=='p'&&o.nk.indexOf(nid)<0)o.nk.push(nid);}
+  o.kn=o.kn.filter(function(k){return o.nk.indexOf(k)<0;});
+  if(e.rel&&typeof e.rel==='object'&&!Array.isArray(e.rel)){o.rel={};var rc=0;for(var rid0 in e.rel){if(rc>=4)break;var rid=resolveId(rid0);var rv=e.rel[rid0];if(!rid||rid==='p'||!rv||typeof rv!=='object')continue;rc++;o.rel[rid]={};
+    for(var rd in rv){if(REL_KEYS.indexOf(rd)>=0&&typeof rv[rd]==='number')o.rel[rid][rd]=clamp(Math.round(rv[rd]),-8,8);}}}
   o.proof=(e.proof==='strong'||e.proof==='weak')?e.proof:'none';
   var m=+e.mag;o.mag=isNaN(m)?2:clamp(Math.round(m),1,3);
   if(e.rank!==undefined){var rk=+e.rank;if(!isNaN(rk)&&rk)o.rank=rk>0?1:-1;}
@@ -15659,6 +15670,7 @@ var Facts={};
   for(var i=0;i<list.length&&i<3;i++){
    var o=null;try{o=Facts.norm(list[i]);}catch(e){}
    if(!o){res.rej.push('格式無效');continue;}
+   if(ctx.polish){if(i>=1)break;delete o.rank;delete o.quest;delete o.goal;delete o.item;delete o.flag;o.mag=1;if(o.vis>1)o.vis=1;}
    var v=Facts.validate(o);
    if(!v.ok){res.rej.push(v.reason);res.lines.push('（無法成立：'+v.reason+'）');continue;}
    if(v.dead&&v.dead.length)res.lines.push('（'+v.dead.map(nmx).join('、')+'已不在人世，無從得知此事。）');
@@ -15672,9 +15684,15 @@ var Facts={};
     fa.list.push(f);if(fa.list.length>40){for(var z=0;z<fa.list.length;z++){if(fa.list[z].st==='refuted'||fa.list[z].vis===0&&!Object.keys(fa.list[z].kn).length){fa.list.splice(z,1);break;}}}
    }
    var newly=[];
+   var told=/告知|轉告|寫信|傳信|通知|託人|送信|稟報|稟告|密報|告訴|傳話|信中|書信|飛鴿|派人/.test(o.t+(ctx.scene||''));
+   if(ctx.wit&&o.vis===0&&!told){var kept=[],dropped=[];
+    o.kn.forEach(function(K){if(K==='p'||ctx.wit[K]||((o.type==='relationship'||o.kin==='lover')&&(K===o.sub||K===o.obj)))kept.push(K);else dropped.push(K);});
+    o.kn=kept;if(dropped.length){res.lines.push('（'+dropped.map(nmx).join('、')+'並不在場，不計入知情者。）');Facts.stat.witDrop+=dropped.length;}}
+   f.nk=f.nk||{};o.nk.forEach(function(K){if(f.kn[K]===undefined)f.nk[K]=1;});
    for(var k=0;k<o.kn.length;k++){var K=o.kn[k];if(K==='p'){f.pk=1;continue;}
     if(f.kn[K]===undefined||f.kn[K]<(good?92:48)){var wasNew=f.kn[K]===undefined;Facts.learn(K,f,'',good?92+rnd(8):48+rnd(10),true);if(wasNew)newly.push(K);}
     f.obs[K]=1;}
+   if(o.rel){var lim=(SET.diff==='hard'||SET.diff==='hell')?4:8;for(var rk in o.rel){if(f.kn[rk]!==undefined&&f.kn[rk]>=50&&alive(rk)){for(var dk in o.rel[rk]){addRel(rk,dk,clamp(o.rel[rk][dk],-lim,lim),null);}}}}
    if(!d){Facts.applyOnce(f,o,res);}
    else if(good&&d.st==='true'&&!d.applied){Facts.applyOnce(f,o,res);}
    if(o.rank&&good){S.p.rank=clamp(S.p.rank+o.rank,0,4);S.p.title=titleOf();F().rkDay=S.day;res.lines.push('官職變動：'+S.p.title);addLog('因身世／秘辛之事，你的官職變為「'+S.p.title+'」');}
@@ -15687,6 +15705,7 @@ var Facts={};
    var tl=(good?'【屬實】':'【未證實】')+'「'+f.t+'」';
    res.lines.unshift(tl+'〔可信度約'+pl+'%〕');
    if(f.sub==='p'&&f.kin==='parent'&&f.obj&&good&&!d)res.lines.push('你的身世在這個世界中成為了事實：'+nmx(f.obj)+(f.lab?'與'+f.lab:'')+'之'+(S.p.gender==='f'?'女':'子')+'。');
+   if(f.vis===0){var kl=Object.keys(f.kn).filter(function(K){return alive(K)&&f.kn[K]>=55;}).map(nmx);res.lines.push('知情者：玩家'+(kl.length?'、'+kl.join('、'):'')+'；其餘人尚不知情。');}
    if(!good)res.lines.push('缺少憑據，旁人只當作傳聞妄語。找到信物或證據（出示給當事人）後可轉為屬實。');
    for(var q=0;q<newly.length;q++){var rl=Facts.reactLine(newly[q],f);if(rl)res.lines.push(rl);}
    logC('錄入：'+f.t+(good?'（屬實）':'（未證實）'),'new',f.i);
@@ -15746,7 +15765,7 @@ var Facts={};
   if(!NPC[K]||!alive(K))return false;
   b=clamp(Math.round(b),10,100);
   if(f.kn[K]!==undefined&&f.kn[K]>=b)return false;
-  var first=f.kn[K]===undefined;f.kn[K]=b;
+  var first=f.kn[K]===undefined;f.kn[K]=b;if(f.nk)delete f.nk[K];
   if(!first){Facts.react(K,f,b,true);return true;}
   F().cnt.learn++;
   f.hist.push({d:S.day,t:nmx(K)+(via?'自'+nmx(via)+'處':'')+'得知'});if(f.hist.length>20)f.hist.shift();
@@ -15923,6 +15942,8 @@ var Facts={};
   for(var i=0;i<arr.length&&out.length<3;i++){var e=arr[i];if(!e||typeof e!=='object'||Array.isArray(e))continue;
    var c={};['type','subject','object','kin','label','text','vis','proof','flag','item'].forEach(function(k){if(typeof e[k]==='string')c[k]=e[k].slice(0,140);});
    if(typeof e.mag==='number')c.mag=e.mag;if(typeof e.truth==='boolean')c.truth=e.truth;
+   if(Array.isArray(e.notKnownBy))c.notKnownBy=e.notKnownBy.filter(function(x){return typeof x==='string';}).slice(0,6);
+   if(e.rel&&typeof e.rel==='object'&&!Array.isArray(e.rel)){c.rel={};var nn=0;for(var ri in e.rel){if(nn++>=4)break;var rv2=e.rel[ri];if(rv2&&typeof rv2==='object'){c.rel[ri]={};for(var rd2 in rv2){if(typeof rv2[rd2]==='number')c.rel[ri][rd2]=rv2[rd2];}}}}
    if(Array.isArray(e.knownBy))c.knownBy=e.knownBy.filter(function(x){return typeof x==='string';}).slice(0,6);
    if(typeof e.rank==='number')c.rank=e.rank;
    if(e.quest&&typeof e.quest==='object')c.quest=e.quest;if(e.goal&&typeof e.goal==='object')c.goal=e.goal;
@@ -16160,6 +16181,8 @@ var Facts={};
     +'<div style="font-size:14px;line-height:1.55;margin:4px 0">'+esc(f.t)+'</div>'
     +'<div class="hint">'+(f.st==='true'?'✔ 屬實':'⚠ 未證實（缺憑據）')+(f.ack>=1?'　✔ 已獲親人承認':'')+'　憑據 '+(f.ev||0)+'　'+esc(dateStr(f.d))+'錄入</div>'
     +'<div class="chips" style="margin-top:6px">'+(kn.join('')||'<span class="hint">目前只有你知道</span>')+'</div>'
+    +(function(){var nn=[];for(var K2 in (f.nk||{})){if(alive(K2)&&f.kn[K2]===undefined)nn.push(nmx(K2));}return nn.length?'<div class="hint" style="margin-top:4px">🙈 尚不知情（你瞞著／不在場）：'+esc(nn.join('、'))+'</div>':'';})()
+    +(f.src==='ai'?'<div class="hint" style="margin-top:2px">來源：劇情推演（AI）</div>':'')
     +'<div class="acts" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">'
     +(f.vis<2?'<button type="button" class="gobtn sm dark" data-act="factleak" data-f="'+f.i+'">放出風聲</button>':'')
     +(f.vis>0&&f.vis<2&&f.st==='true'?'<button type="button" class="gobtn sm dark" data-act="factpub" data-f="'+f.i+'">昭告天下</button>':'')
@@ -16190,6 +16213,229 @@ var Facts={};
   return done('尋找憑據',txt+fxLine(applyFx(fx)),'');
  };
  /* 休息／入夜時由 AI 場景完成後的提示補充 */
+})();
+
+/* ---- 61_facts3.js ---- */
+/* ===== 秦風 · 知識防火牆／見證者／前情摘要（掛在 Facts 之後；所有 AI 路徑共用）===== */
+(function(){
+ var F=Facts.F;
+ function nmx(id){return id==='p'?S.p.name:(NPC[id]?NPC[id].n:'某人');}
+ var STOP='的是了在和與於之而其他她也我你被把將';
+ function grams(t){
+  var s=String(t||'').replace(/[\s，。、；：！？「」『』（）()〔〕【】·,.;:!?"'\-—…]/g,'');var out={};
+  for(var i=0;i+3<=s.length;i++){var g=s.substr(i,3),bad=false;for(var k=0;k<3;k++){if(STOP.indexOf(g.charAt(k))>=0){bad=true;break;}}if(!bad)out[g]=1;}
+  return out;
+ }
+ /* 句子切分（引號內的句號不切）*/
+ function splitS(text){
+  var out=[],cur='',dep=0;text=String(text||'');
+  for(var i=0;i<text.length;i++){var c=text.charAt(i);cur+=c;
+   if(c==='「'||c==='『')dep++;else if(c==='」'||c==='』')dep=Math.max(0,dep-1);
+   else if(dep===0&&(c==='。'||c==='！'||c==='？'||c==='\n')){if(cur.replace(/\s/g,''))out.push(cur);cur='';}}
+  if(cur.replace(/\s/g,''))out.push(cur);return out;
+ }
+ /* 某 NPC 對某事實的知情狀態 */
+ function knows(K,f){
+  if(K==='p'||f.vis>=2)return true;
+  if(f.kn&&f.kn[K]!==undefined&&f.kn[K]>=30)return true;
+  if(f.sub===K&&f.sub!=='p'&&f.type!=='identity')return true;
+  if(f.obj===K&&(f.type==='relationship'||f.kin==='lover'))return true;
+  return false;
+ }
+ Facts.knows=knows;
+ /* 見證者：在場的人＋說話者＋場景文字中出現的人 */
+ Facts.witnesses=function(text,speaker){
+  var w={};
+  try{hereNpcs().forEach(function(x){if(NPC[x]&&alive(x)&&spotOf(x)===S.p.spot)w[x]=1;});}catch(e){}
+  if(speaker&&NPC[speaker])w[speaker]=1;
+  try{Facts.mentions(String(text||'')).forEach(function(m){w[m.id]=1;});}catch(e2){}
+  return w;
+ };
+ /* 取得需檢查的秘密（vis=0）：已入庫＋本幕新登記 */
+ function secretsToScan(effects){
+  var out=[];(F().list||[]).forEach(function(f){if(f.st!=='refuted'&&f.vis===0)out.push({f:f,g:grams(f.t)});});
+  (effects||[]).forEach(function(e){try{var o=Facts.norm(e);if(o&&o.vis===0){var kn={};o.kn.forEach(function(k){kn[k]=95;});
+   out.push({f:{i:0,t:o.t,sub:o.sub,obj:o.obj,type:o.type,kin:o.kin,vis:0,kn:kn},g:grams(o.t)});}}catch(e2){}});
+  return out;
+ }
+ function hitCount(seg,g){var c=0,tot=0;for(var k in g){tot++;if(seg.indexOf(k)>=0)c++;}return {c:c,thr:Math.min(2,tot)};}
+ /* 洩密掃描：回傳 [{K,f,s}]：K 為不知情卻說出／表現出知道秘辛的 NPC */
+ Facts.leakScan=function(text,effects,speaker,told){
+  var secs=secretsToScan(effects);if(!secs.length)return [];
+  var hits=[],seen={};var ss=splitS(text);
+  for(var si=0;si<ss.length;si++){var s=ss[si];var ms=Facts.mentions(s);
+   var cand=[];  /* [{K, seg}] */
+   var q=s.indexOf('「');
+   if(q>=0){
+    var qe=s.lastIndexOf('」');if(qe<q)qe=s.length;
+    var K=null,bef=ms.filter(function(m){return m.p<q;});
+    if(bef.length)K=bef[bef.length-1].id;
+    else{var aft=ms.filter(function(m){return m.p>=qe&&m.p<qe+7;});if(aft.length)K=aft[0].id;else if(speaker)K=speaker;}
+    if(K&&NPC[K])cand.push({K:K,seg:s.slice(q,qe+1)});
+   }
+   for(var mi=0;mi<ms.length;mi++){var m=ms[mi];
+    var tail=s.slice(m.e,m.e+10);
+    if(/^(?:早已|已經|已|竟|終於|似乎|隱約|暗自|悄悄|其實|也)?(?:知道|知曉|得知|察覺|看穿|識破|聽說|查出|明白|猜到|洞悉|曉得|看出)/.test(tail)&&NPC[m.id]){cand.push({K:m.id,seg:q>=0?s.slice(0,q)+s.slice(q):s});}}
+   for(var ci=0;ci<cand.length;ci++){var cd=cand[ci];if(!alive(cd.K))continue;if(told&&told.indexOf(cd.K)>=0)continue;
+    for(var fi=0;fi<secs.length;fi++){var sec=secs[fi];if(knows(cd.K,sec.f))continue;
+     var h=hitCount(cd.seg,sec.g);if(h.thr>0&&h.c>=h.thr){var key=cd.K+'|'+sec.f.t+'|'+si;if(seen[key])continue;seen[key]=1;hits.push({K:cd.K,f:sec.f,s:s,si:si});}}}
+  }
+  return hits;
+ };
+ /* 批次世界事件用：單句台詞 */
+ Facts.leakLine=function(K,line){
+  try{if(!NPC[K])return false;var secs=secretsToScan(null);for(var i=0;i<secs.length;i++){if(knows(K,secs[i].f))continue;var h=hitCount(String(line||''),secs[i].g);if(h.thr>0&&h.c>=h.thr){Facts.stat.leakFix++;return true;}}}catch(e){}
+  return false;
+ };
+ /* 洩密處理：單句→改寫；多句→丟 leak（回退離線）*/
+ Facts.leakFix=function(r,hits){
+  var sents={};hits.forEach(function(h){sents[h.si]=h;});var ks=Object.keys(sents);
+  if(ks.length>=2){Facts.stat.leakRej++;throw {kind:'leak',who:nmx(hits[0].K),what:hits[0].f.t};}
+  var h=hits[0];var rest=String(r.scene).replace(h.s,'');
+  if(rest.replace(/\s/g,'').length<40){Facts.stat.leakRej++;throw {kind:'leak',who:nmx(h.K),what:h.f.t};}
+  r.scene=String(r.scene).replace(h.s,nmx(h.K)+'神色如常，終究沒有多說什麼。');
+  Facts.stat.leakFix++;
+  try{if(typeof toast==='function')toast('🛡 已改寫一句：'+nmx(h.K)+'並不知道此事',3200);}catch(e){}
+  try{Facts.log('知識防火牆：改寫了一句「'+nmx(h.K)+'」不該說出的話','guard',0,false);}catch(e2){}
+ };
+ /* AI 回覆套用前：洩密檢查＋隱蔽事件過濾 */
+ Facts.preAI=function(r,a){
+  if(!r||!S||!S.x)return r;
+  var txt=r.scene||'',effs=r.effects||[];
+  var wit=Facts.witnesses(txt,r.speaker);r._wit=wit;
+  var told=[];
+  if(a&&a.type==='free'&&a.text&&/告訴|告知|說給|說出|坦白|透露|出示|拿給|拿出|展示|亮出|稟報|密報|讓.{0,6}知道|轉告|對.{0,6}說/.test(a.text)){
+   try{told=Facts.mentions(a.text).map(function(m){return m.id;}).filter(function(id){return alive(id);});}catch(e0){}
+   if(told.length)effs.forEach(function(e){e.knownBy=e.knownBy||[];told.forEach(function(id){if(e.knownBy.indexOf(id)<0&&(e.notKnownBy||[]).indexOf(id)<0)e.knownBy.push(id);});});
+  }
+  try{
+   var hits=Facts.leakScan(txt,effs,r.speaker,told);
+   if(a&&a.type==='polish'&&a.scene){var oh=Facts.leakScan(a.scene.t||'',[],'');var sk={};oh.forEach(function(h){sk[h.K+'|'+h.f.t]=1;});hits=hits.filter(function(h){return !sk[h.K+'|'+h.f.t];});}
+   if(hits.length)Facts.leakFix(r,hits);
+  }catch(e){if(e&&e.kind==='leak')throw e;if(window.console)console.error('leakScan',e);}
+  try{
+   var nk={},involved={},covert=false;told.forEach(function(id){wit[id]=1;});
+   effs.forEach(function(e){
+    if(!e.vis||e.vis==='secret')covert=true;
+    (e.notKnownBy||[]).forEach(function(x){var id=Facts.resolve(x);if(id)nk[id]=1;});
+    });
+   var keepRel=function(id){if(nk[id])return false;if(covert&&!wit[id]&&!involved[id])return false;return true;};
+   var flt=function(fx){if(!fx)return;var n0=0;
+    if(fx.rel){for(var id in fx.rel){if(!keepRel(id)){delete fx.rel[id];n0++;}}}
+    if(fx.mem){for(var id2 in fx.mem){if((covert||nk[id2])&&(!wit[id2]&&!involved[id2]||nk[id2])){delete fx.mem[id2];n0++;}}}
+    if(fx.sus){fx.sus=fx.sus.filter(function(x){var ok=!nk[x[0]]&&!nk[x[1]];if(!ok)n0++;return ok;});}
+    Facts.stat.fxDrop+=n0;};
+   flt(r.fx);(r.choices||[]).forEach(function(c){flt(c.fx);});
+  }catch(e3){if(window.console)console.error('fxFilter',e3);}
+  return r;
+ };
+ /* 套用後：登記事實、寫入前情 */
+ Facts.postAI=function(r,a){
+  var res={items:[],lines:[],rej:[]};
+  var polish=a&&a.type==='polish';
+  if(r.effects&&r.effects.length){res=Facts.ingest(r.effects,{src:'ai',wit:r._wit,scene:r.scene,speaker:r.speaker,polish:polish});}
+  if(!polish)Facts.addStory(r.scene,r.recap,a,res);
+  return res;
+ };
+ Facts.story=function(t){
+  if(!S||!S.x)return;var L=S.x.story=S.x.story||[];t=String(t||'').replace(/\s+/g,' ').slice(0,70);if(!t)return;
+  if(L.length&&L[L.length-1].t===t)return;
+  L.push({d:(S.stat&&S.stat.days)||0,t:t});if(L.length>40)L.shift();
+ };
+ Facts.addStory=function(scene,recap,a,res){
+  var rc=String(recap||'');
+  if(!rc){var s=String(scene||'').replace(/【[^】]*】/g,'').replace(/〔[^〕]*〕/g,'').replace(/\s+/g,'');var m=s.match(/^[^。！？]{6,60}/);rc=m?m[0]:s.slice(0,40);}
+  var pre=(a&&a.type==='free'&&a.text)?'你「'+String(a.text).slice(0,14)+'」→':'';
+  Facts.story(pre+rc.slice(0,48));
+  ((res&&res.items)||[]).forEach(function(it){if(!it.dup)Facts.story('〔'+(it.st==='true'?'屬實':'傳聞')+'〕'+it.f.t.slice(0,40));});
+ };
+ /* 判斷官路徑 */
+ Facts.preJudge=function(v,j){
+  var ef=[];try{ef=Facts.cleanEffects(j&&j.effects);}catch(e){}
+  try{Object.defineProperty(v,'_fx',{value:ef,enumerable:false,configurable:true});}catch(e1){}
+  var txt=[];(function walk(o,d){if(d>3||!o)return;if(typeof o==='string')txt.push(o);else if(typeof o==='object'){for(var k in o)walk(o[k],d+1);}})(v,0);
+  var hits=Facts.leakScan(txt.join('\n'),ef,'');
+  if(hits.length){Facts.stat.leakRej++;throw {kind:'leak',who:nmx(hits[0].K),what:hits[0].f.t};}
+ };
+ Facts.postJudge=function(v,a,sc){
+  var res={items:[],lines:[]};
+  var ef=v&&v._fx;
+  if(ef&&ef.length){res=Facts.ingest(ef,{src:'ai',wit:Facts.witnesses(sc.t,sc.sp),scene:sc.t,speaker:sc.sp});if(res.lines.length)sc.t+='\n〔秘辛・'+res.lines.join('　')+'〕';}
+  Facts.addStory(sc.t,'',null,res);
+ };
+ /* ---------- 知情表（寫進每個 AI 提示）---------- */
+ Facts.firewall=function(){
+  var fa=S&&S.x&&S.x.facts;if(!fa||!fa.list.length)return '';
+  var lv={low:2,mid:4,high:6}[SET.sumLevel]||4;
+  var L=fa.list.filter(function(f){return f.st!=='refuted'&&f.vis<2;}).slice(-lv);if(!L.length)return '';
+  var ids=[];try{ids=AI.relevantIds().slice(0,10);}catch(e){}
+  try{Facts.witnesses(S.scene&&S.scene.t||'',S.scene&&S.scene.sp||'');var w=Facts.witnesses(S.scene&&S.scene.t||'',S.scene&&S.scene.sp||'');for(var k in w){if(ids.indexOf(k)<0)ids.push(k);}}catch(e2){}
+  var out=['【知情表（知識防火牆）】不知情者在對白、神情、念頭中絕不可提及、暗示或引用該事；知情者必須有相應態度；新事件只有在場／被告知者才知道。'];
+  L.forEach(function(f){
+   var kn=[],ign=[];
+   Object.keys(f.kn).forEach(function(K){if(alive(K)&&f.kn[K]>=30)kn.push(nmx(K)+'('+K+')'+(f.kn[K]<55?'疑':''));});
+   ids.forEach(function(K){if(!NPC[K]||!alive(K))return;if(knows(K,f)&&f.kn[K]===undefined)kn.push(nmx(K)+'('+K+')');else if(!knows(K,f))ign.push(nmx(K)+'('+K+')');});
+   out.push('・F'+f.i+'〔'+(f.st==='true'?'屬實':'傳聞')+'·'+(f.vis?'已有傳聞':'秘密')+'〕'+f.t.slice(0,30)+'｜知情：玩家'+(kn.length?'、'+kn.join('、'):'')+'｜不知情：'+(ign.slice(0,10).join('、')||'其餘所有人'));
+  });
+  var gs=[];for(var g in fa.goal){if(fa.goal[g].until>S.day&&alive(g))gs.push(nmx(g)+'近來心思在「'+(window.World&&World.GN?World.GN[fa.goal[g].g]:fa.goal[g].g)+'」');}
+  if(gs.length)out.push('【人物動向】'+gs.join('；'));
+  return out.join('\n');
+ };
+ Facts.RULES_BATCH='\n注意：台詞中不可讓不知情者提及【知情表】所列秘辛。\n';
+ var RULES9='\n9. 知識防火牆與隱蔽事件：提示中的【知情表】列出每項秘辛誰知道、誰不知道。不知情者絕不可在對白、神情、念頭或旁白中提及、暗示、引用該事，否則會被系統改寫或捨棄。若本幕是隱蔽行動（暗中調查、偷聽、潛入、私下交談、取得物證），effects 的 vis 填 secret，knownBy 只填親眼所見／在場／被明確告知的人（必須是【在場】人物或劇情中交代過的告知對象），其餘相關者填 notKnownBy；不要把全城人都寫成知情。effects 每項可含 rel:{"npc_id":{"tr":0,"af":0,"su":0,"fe":0}}（±8，只對知情者生效）。新發現的線索（印記、信物、地點、針腳等）用 type:"secret"，proof 填 weak 或 strong，text 要寫出可驗證的具體細節。後續選項須反映最新狀態（官階、關係、任務、物品、【前情】與【知情表】），可含利用、隱瞞、查證或告知某人的選項。每幕必須附 "recap"：一句話（30字內）概述本幕發生了什麼，供日後記憶。\n';
+ var RULES9S='隱蔽事件的秘辛用 vis:"secret"，knownBy 只填在場或被告知者，其餘填 notKnownBy；【知情表】中不知情者絕不可提及該秘辛；JSON 另加 "recap":"本幕一句話概述(30字內)"，effects 可含 rel（±8，只對知情者生效）。';
+ var _sys=AI.system;AI.system=function(){return _sys()+RULES9;};
+ var _sh=AI.systemShort;AI.systemShort=function(){return _sh()+RULES9S;};
+ var _js=AI.judgeSystem;if(_js)AI.judgeSystem=function(){return _js()+'\n另：若此事揭露了新的秘密／身世／關係，可在JSON加 effects 陣列（格式同秘辛：type,subject,object,kin,label,text,vis,knownBy,notKnownBy,proof,mag）；知情表中不知情者不可在敘述中提及該秘辛。\n';};
+ var _sm=AI.summary;
+ AI.summary=function(){
+  var s=_sm();
+  try{
+   var lv={low:3,mid:5,high:8}[SET.sumLevel]||5;var st=S.x&&S.x.story;
+   if(st&&st.length)s+='\n【前情（滾動摘要，已發生，不可矛盾）】'+st.slice(-lv).map(function(x){return '第'+x.d+'日 '+x.t;}).join('｜');
+   var fw=Facts.firewall();if(fw)s+='\n'+fw;
+  }catch(e){if(window.console)console.error('summary facts',e);}
+  return s;
+ };
+ /* 錯誤訊息／失敗處理（不計入 AI 失敗次數）*/
+ var _em=AI.errMsg;
+ AI.errMsg=function(e){if(e&&e.kind==='leak')return '🛡 AI 的回覆讓「'+e.who+'」說出了他不該知道的秘辛，已捨棄並改用離線劇情。';return _em(e);};
+ var _fail=AI.fail;
+ AI.fail=function(e){
+  if(e&&e.kind==='leak'){var m=AI.errMsg(e);AI.lastErr=m;try{barShow('err',m,false,9000);}catch(x){}if(window.console)console.warn('[AI leak]',m);return;}
+  return _fail(e);
+ };
+
+ /* ---------- 離線／手動：解析範圍（誰在場、誰知道、誰不知道、公開或隱蔽）---------- */
+ Facts.scope=function(t,ms){
+  var sc={vis:null,only:null,add:[],nk:[],none:false};
+  if(/(?:沒有人|無人|沒人|誰也不|誰都不)(?:知道|知曉|看見|看到|察覺|發現)|神不知鬼不覺/.test(t)){sc.none=true;sc.vis=0;}
+  var mo=t.match(/(?:只有|僅有|唯有|只被|僅被|僅)([^，。,]{1,14}?)(?:知道|知曉|看見|看到|目睹|撞見|在場|發現|聽見|聽到)/);
+  if(mo){var oi=Facts.mentions(mo[1]).map(function(m){return m.id;});if(oi.length){sc.only=oi;sc.vis=0;}}
+  for(var i=0;i<ms.length;i++){var m=ms[i];var tail=t.slice(m.e,m.e+8),b4=t.slice(Math.max(0,m.p-4),m.p);
+   if(/^(?:並|也|還)?(?:不知道|不知情|不曉得|沒發現|未發現|沒察覺|被蒙在鼓裡|毫不知情|並不知)/.test(tail)||/(?:瞞著|瞞過|避開|背著|不讓|沒讓|避著|瞞住)$/.test(b4))sc.nk.push(m.id);
+   else if(/^(?:也)?(?:在場|親眼|也看見|也看到|也在旁|也聽到)/.test(tail)||/當著$/.test(b4))sc.add.push(m.id);}
+  if(/(當眾|公開|朝堂之上|朝堂上|眾目睽睽|眾人面前|廣場上|當著(?:百官|群臣|眾人)|昭告天下)/.test(t)){sc.vis=2;}
+  else if(sc.vis===null&&/(暗中|偷偷|悄悄|私下|暗地|秘密|暗自|潛入|偷聽|密談)/.test(t))sc.vis=0;
+  return sc;
+ };
+ var _pp=Facts.parse;
+ Facts.parse=function(text){
+  var out=_pp(text);if(!out||!out.length)return out;
+  try{
+   var t=String(text||'').replace(/\s+/g,'');var sc=Facts.scope(t,Facts.mentions(t));
+   out.forEach(function(e){
+    if(sc.vis!==null&&sc.vis!==undefined)e.vis=(sc.vis===2?'public':sc.vis===1?'rumor':'secret');
+    var kb=(e.knownBy||[]).slice();
+    if(sc.only)kb=sc.only.slice();
+    sc.add.forEach(function(x){if(kb.indexOf(x)<0)kb.push(x);});
+    if(sc.none)kb=[];
+    kb=kb.filter(function(x){return sc.nk.indexOf(x)<0;});
+    e.knownBy=kb;if(sc.nk.length)e.notKnownBy=sc.nk.slice();
+   });
+  }catch(err){if(window.console)console.error('scope',err);}
+  return out;
+ };
 })();
 
 /* ---- 99_boot.js ---- */
