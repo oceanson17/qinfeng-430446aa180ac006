@@ -931,7 +931,7 @@ function newState(cfg){
  if(REGIONS[S.p.region].sub.indexOf(S.p.spot)<0)S.p.spot=REGIONS[S.p.region].sub[0];
  // 初始人際
  var boss=bossOf();
- if(boss&&alive(boss)){var r=R(boss);r.met=1;r.tr=25;r.af=20;}
+ if(boss&&alive(boss)&&NPC[boss].tier<=2){var r=R(boss);r.met=1;r.tr=25;r.af=20;}  /* 高層人物（tier≥3）開局不識玩家，由「初遇」事件逐步結識 */
  if(pth==='eunuch'&&alive('zhoushan')){addMem('zhoushan','新入宮的小宦者前來拜見，神色恭謹。');R('zhoushan').met=1;R('zhoushan').tr=20;}
  if(S.p.disg){S.flags.disguised=1;}
  S.p.title=titleOf();
@@ -2541,6 +2541,7 @@ function visitReasons(id){
 function visitCandidates(){
  var cand=[];var here=hereNpcs();
  for(var i=0;i<here.length;i++){var id=here[i];var r=S.rel[id];if(!r||!r.met)continue;if(S.day-(r.vis||-999)<45)continue;
+  if(window.Pace&&!Pace.can(id))continue;
   var rs=visitReasons(id);for(var j=0;j<rs.length;j++)cand.push({id:id,r:rs[j][0],w:rs[j][1]});}
  return cand;
 }
@@ -2638,23 +2639,24 @@ NODES.banditAct=function(a){
 /* ===== 導演 ===== */
 function directorMaybe(){
  if(!S||S.pending.length)return;
- if(S.day-S.lastDir<8)return;
+ if(S.day-S.lastDir<Math.round(8*(window.Pace?Pace.dirMul():1)))return;
  var f={history:0.7,balanced:1,free:1.4}[SET.free]||1;
  if(!roll(30*f))return;
  var sc=pickInterrupt();if(sc){S.pending.push(sc);S.lastDir=S.day;}
 }
+function pz_(sc){if(sc&&sc.sp&&NPC[sc.sp])sc.pace=1;return sc;}
 function pickInterrupt(){
  var pool=[];var vc=visitCandidates();for(var i=0;i<vc.length;i++)pool.push({k:'v',d:vc[i],w:vc[i].w*1.6});
  for(i=0;i<RE.length;i++){var e=RE[i];var ok=false;try{ok=e.c();}catch(er){ok=false;}if(ok)pool.push({k:'e',d:e,w:e.w});}
  for(i=0;i<QT.length;i++){var q=QT[i];var ok2=false;try{ok2=q.c();}catch(er2){ok2=false;}if(ok2)pool.push({k:'q',d:q,w:q.w});}
- if(SET.ai&&SET.aiMode==='full'&&AI.ready()&&S.turn%Math.max(1,SET.aiRate)===0)pool.push({k:'ai',d:null,w:25});
+ if(SET.ai&&SET.aiMode==='full'&&AI.ready()&&S.turn%Math.max(1,SET.aiRate)===0&&(!window.Pace||Pace.aiOk()))pool.push({k:'ai',d:null,w:25});
  if(!pool.length)return null;
  var tot=0;for(i=0;i<pool.length;i++)tot+=pool[i].w;var r=rand()*tot;var sel=pool[0];
  for(i=0;i<pool.length;i++){r-=pool[i].w;if(r<=0){sel=pool[i];break;}}
- if(sel.k==='v')return visitScene(sel.d.id,sel.d.r);
- if(sel.k==='e')return reScene(sel.d);
- if(sel.k==='q')return sel.d.s();
- if(sel.k==='ai')return aiGenScene();
+ if(sel.k==='v')return pz_(visitScene(sel.d.id,sel.d.r));
+ if(sel.k==='e')return pz_(reScene(sel.d));
+ if(sel.k==='q')return pz_(sel.d.s());
+ if(sel.k==='ai'){if(window.Pace)Pace.aiMark();return aiGenScene();}
  return null;
 }
 function aiGenScene(){return {t:'……',sp:'',bg:S.p.spot,kind:'loading',ch:[],async:{type:'gen',fb:{go:'hub',a:{}}}};}
@@ -6042,7 +6044,8 @@ directorMaybe=function(){
   if(rand()>rate)return;
   var id=encPick();if(!id)return;
   x.encN=(x.encN||0)+1;
-  S.pending.push(NODES.dt({id:id,k:'start'}));
+  var esc0=NODES.dt({id:id,k:'start'});if(esc0&&esc0.sp&&NPC[esc0.sp])esc0.pace=1;
+  S.pending.push(esc0);
  }catch(e){if(window.console)console.error('enc',e);}
 };
 /* 抉擇回顧面板 */
@@ -7167,6 +7170,7 @@ function VIS(id,npc,topic,intro,w,cond,bg){
  QT.push({id:'vis_'+id,w:w||10,
   c:function(){
    if(!alive(npc))return false;
+   if(window.Pace&&!Pace.can(npc))return false;
    if(S.flags['vis_'+id]&&S.day-S.flags['vis_'+id]<150)return false;
    if(!dtAvail(topic))return false;
    try{if(cond&&!cond())return false;}catch(e){return false;}
@@ -9040,7 +9044,7 @@ function loveDay(){
   if(others>0)r2.j=clamp(r2.j+Math.round((P.pos/100)*5*others*DS()),0,100);else r2.j=Math.max(0,r2.j-4);
   if(r2.j>=65&&others>0&&(r2.ev.sc||-99)+40<S.day&&sameRegion(act[i])&&roll(55)){
    var rv=act.filter(function(x){return x!==act[i];});rv.sort(function(a,b){return L.c[b].h-L.c[a].h;});
-   r2.ev.sc=S.day;S.pending.push(jealScene(act[i],rv[0]));break;}}
+   r2.ev.sc=S.day;S.pending.push(pz_(jealScene(act[i],rv[0])));break;}}
  /* 困境 */
  for(id in L.c){var r3=L.c[id];if(!alive(id)||r3.st<1||r3.pl)continue;if(sameRegion(id)&&roll(3)){var pl=pick([['ill','染了風寒，臥病在床，需要藥錢'],['harass','被地痞惡少糾纏，不得脫身'],['debt','家中欠債，債主堵門'],['lost','珍視的家書遺失，焦急萬分']]);r3.pl={k:pl[0],t:pl[1],d:S.day};
   S.pending.push(scene('【消息】\n有人帶來消息：'+nm(id)+pl[1]+'。\n（你可以到「情緣」選單選擇「出手相助」。）',id,{bg:S.p.spot,kind:'event',ch:[ch('前去探望','loveMenu',{id:id}),ch('稍後再說','hub')],tag:'情緣'}));break;}}
@@ -9050,7 +9054,7 @@ function loveDay(){
    if(!loveOK(id)||!likesMe(id)||!sameRegion(id))continue;var rr=LR(id);if(rr.pur&&rr.pur>0&&S.day-rr.last<60)continue;if((rr.ev.pu||-99)+30>S.day)continue;if(rr.st>=3)continue;
    var ap=appeal(id);if(ap<38)continue;cands.push([id,ap]);}
   if(cands.length){var pickc=cands[rnd(cands.length)];var chance=clamp((pickc[1]-30)*0.9+(S.p.st.rep>30?6:0),5,60)*(SET.diff==='hell'?1.1:1);
-   if(roll(chance)){LR(pickc[0]).ev.pu=S.day;S.pending.push(pursueScene(pickc[0]));}}
+   if(roll(chance)){LR(pickc[0]).ev.pu=S.day;S.pending.push(pz_(pursueScene(pickc[0])));}}
  }
 }
 function reasonText(id,key){
@@ -15813,7 +15817,7 @@ var Facts={};
    Facts.plot(K,f,st,b);}
  };
  /* ---------- 劇情鉤子 ---------- */
- function chain(step,f,K,days){qpush(Math.max(1,days),'fact',{s:step,f:f.i,k:K});F().cnt.chain++;}
+ function chain(step,f,K,days){if(window.Pace)days=Pace.chainDays(days);qpush(Math.max(1,days),'fact',{s:step,f:f.i,k:K});F().cnt.chain++;}
  Facts.plot=function(K,f,st,b){
   var n=NPC[K],easy=SET.diff==='easy',hard=SET.diff==='hard'||SET.diff==='hell';
   if(f.st==='refuted')return;
@@ -15844,22 +15848,26 @@ var Facts={};
   /* 到期的傳遞 */
   for(var i=fa.pend.length-1;i>=0;i--){var p=fa.pend[i];if(p.due>S.day)continue;fa.pend.splice(i,1);var f=byId(p.f);if(!f||f.st==='refuted')continue;if(!alive(p.to))continue;if(p.from&&fa.hush[p.from]>S.day)continue;Facts.learn(p.to,f,p.from,p.b);}
   for(i=0;i<fa.list.length;i++){var f2=fa.list[i];if(f2.st==='refuted')continue;
-   var kn=Object.keys(f2.kn).filter(function(k){return alive(k)&&f2.kn[k]>=30;});
+   var pz=(window.Pace&&f2.sub==='p'&&f2.st!=='refuted')?Pace.spread(f2):null;
+   var kn=Object.keys(f2.kn).filter(function(k){return alive(k)&&f2.kn[k]>=(pz?pz.min:30);});
    if(f2.vis>=1&&f2.sub==='p'&&kn.length===0){continue;}
    var cap=Math.min(kn.length,6);
+   if(pz&&Pace.sureN(f2)>=pz.cap&&f2.vis<2)cap=0;
    for(var j=0;j<cap;j++){var K=kn[j];if(fa.hush[K]>S.day)continue;
     var stn=Facts.stance(K,f2);var mult=(stn==='protect'||stn==='friend'||stn==='kin'||stn==='self')?0.3:((stn==='exploit'||stn==='foe')?1.6:(stn==='ruler'?0.6:1));
     var ch0=[0.05,0.1,0.2][f2.vis]*gossip(K)*mult;
     if(f2.vis===2)ch0=Math.min(0.5,ch0*2);
+    if(pz&&f2.vis<2){ch0*=pz.mulp;if(!Pace.room(f2,pz))continue;}
     if(rand()>=ch0)continue;
     var tgt=pickRecipient(K,f2);if(!tgt)continue;
     var pb=clamp(f2.kn[K]-6-rnd(22),15,100);
-    fa.pend.push({to:tgt,from:K,f:f2.i,due:S.day+1+rnd(4),b:pb});
+    if(pz&&f2.vis<2){pb=Math.min(pb,pz.bmax);Pace.used(f2);}
+    fa.pend.push({to:tgt,from:K,f:f2.i,due:S.day+(pz&&f2.vis<2?pz.delay():1+rnd(4)),b:pb});
    }
    if(f2.vis>=2&&rand()<0.5){var ids=[];for(var q=0;q<NPCS.length;q++){var id=NPCS[q].id;if(alive(id)&&!NPCS[q].child&&f2.kn[id]===undefined)ids.push(id);}
     for(q=0;q<3&&ids.length;q++){var pi=rnd(ids.length);fa.pend.push({to:ids[pi],from:'',f:f2.i,due:S.day+1+rnd(3),b:60+rnd(30)});ids.splice(pi,1);}}
    f2.risk=Facts.risk(f2);
-   if(f2.vis<2&&Object.keys(f2.kn).length>=9&&!f2.pub){Facts.goPublic(f2);}
+   if(f2.vis<2&&Object.keys(f2.kn).length>=9&&!f2.pub&&!pz){Facts.goPublic(f2);}
   }
   for(var h in fa.hush){if(fa.hush[h]<=S.day)delete fa.hush[h];}
   for(var g in fa.goal){if(fa.goal[g].until<=S.day)delete fa.goal[g];}
@@ -18421,6 +18429,266 @@ Idn.panelHTML=function(){
 };
 var _ps=PANELS.stats;
 PANELS.stats=function(){var h=_ps();try{h+=Idn.panelHTML();}catch(e){}return h;};
+})();
+
+/* ---- 67_pace.js ---- */
+/* ===== 秦風 · 劇情節奏（Pace）：NPC 來訪節流、開局陌生人、初遇事件、自設身世秘辛慢擴散、謠言平息 ===== */
+var Pace={};
+(function(){
+ DEFSET.pace='slow';DEFSET.visitf='mid';
+ var PC={slow:{grace:60,intro:10,gain:0.75,chain:1.6,dir:1.4,g:1.2},mid:{grace:40,intro:7,gain:0.9,chain:1.25,dir:1.15,g:1},fast:{grace:20,intro:4,gain:1,chain:1,dir:1,g:0.85}};
+ var VF={low:{g:6,n:20},mid:{g:4,n:13},high:{g:3,n:9}};
+ var DNS={low:1.25,mid:1,high:0.85};
+ var SPD={easy:{cap:3,mulp:0.18,delay:6},normal:{cap:4,mulp:0.25,delay:5},hard:{cap:5,mulp:0.35,delay:4},hell:{cap:6,mulp:0.45,delay:3}};
+ function nmx(id){return id==='p'?S.p.name:(NPC[id]?NPC[id].n:'某人');}
+ function X(){return S.x;}
+ function P(){var x=X();if(!x.pace)x.pace={ver:1,g:-99,last:{},def:[],intro:-99,skip:{},stat:{ok:0,wait:0,drop:0,intro:0,calm:0},sd:{d:-1,n:0},offer:[]};var p=x.pace;
+  if(!p.last)p.last={};if(!p.def)p.def=[];if(!p.skip)p.skip={};if(!p.stat)p.stat={ok:0,wait:0,drop:0,intro:0,calm:0};if(!p.sd)p.sd={d:-1,n:0};if(!p.offer)p.offer=[];return p;}
+ Pace.P=P;
+ Pace.set=function(){return PC[SET.pace]||PC.slow;};
+ Pace.days=function(){return S.day-(S.stat&&S.stat.startDay!==undefined?S.stat.startDay:(S.day0||S.day));};
+ Pace.grace=function(){return Pace.set().grace;};
+ Pace.graceOf=function(id){var n=NPC[id];if(!n)return 0;if(n.tier>=4)return Pace.grace();if(n.tier===3)return Math.round(Pace.grace()*0.6);return 0;};
+ Pace.gcd=function(){var v=VF[SET.visitf]||VF.mid;return Math.max(2,Math.round(v.g*(DNS[SET.wdens]||1)*Pace.set().g));};
+ Pace.ncd=function(){var v=VF[SET.visitf]||VF.mid;return Math.max(6,Math.round(v.n*(DNS[SET.wdens]||1)*Pace.set().g));};
+ Pace.dirMul=function(){return Pace.set().dir;};
+ Pace.chainDays=function(d){return Math.round(d*Pace.set().chain);};
+ Pace.knows=function(id){var r=S.rel[id];return !!(r&&r.met>0);};
+ /* 與玩家有關聯，才有理由主動來找 */
+ Pace.relevant=function(id){var r=R(id);
+  if(r.tr+r.af>=25||r.su>=30||r.ha>=25||r.lo>=20||r.ly>=20)return true;
+  try{if(id===bossOf())return true;if(window.Facts&&Facts.aboutPlayer(id).length)return true;}catch(e){}
+  return false;};
+ /* 單一 NPC 是否可主動來找（不含全局冷卻） */
+ Pace.can=function(id){
+  if(!S||!S.x||!NPC[id]||!alive(id)||NPC[id].child)return false;
+  if(!Pace.knows(id))return false;
+  if(Pace.days()<Pace.graceOf(id))return false;
+  var p=P();if(S.day-(p.last[id]===undefined?-99:p.last[id])<Pace.ncd())return false;
+  return Pace.relevant(id);
+ };
+ Pace.aiOk=function(){var p=P();return S.day-(p.ai===undefined?-99:p.ai)>=Pace.gcd()*2&&Pace.days()>=Math.round(Pace.grace()/6);};
+ Pace.aiMark=function(){P().ai=S.day;};
+ Pace.mark=function(id){var p=P();p.g=S.day;if(id)p.last[id]=S.day;};
+ function verdict(sc){
+  var id=sc.sp;if(!NPC[id])return 'ok';
+  var p=P(),w=p.stat.why=p.stat.why||{};
+  function no(k){w[k]=(w[k]||0)+1;return 'wait';}
+  if(!Pace.knows(id))return no('陌生');
+  if(Pace.days()<Pace.graceOf(id))return no('高層未滿'+Pace.grace()+'日');
+  if(S.day-p.last[id]<Pace.ncd()&&p.last[id]!==undefined)return no('同人冷卻');
+  if(S.day-p.g<Pace.gcd())return no('全局冷卻');
+  if(!Pace.relevant(id))return no('無關');
+  return 'ok';
+ }
+ Pace.verdict=verdict;
+ Pace.post=function(n0){
+  if(!S||!S.x||!S.pending)return;var p=P(),pend=S.pending;
+  if(n0>pend.length)n0=0;
+  for(var i=n0;i<pend.length;i++){var sc=pend[i];if(!sc||!sc.pace)continue;
+   var v=verdict(sc);
+   if(v==='ok'){Pace.mark(sc.sp);p.stat.ok++;delete sc.pace;continue;}
+   pend.splice(i,1);i--;
+   if(p.def.length<6){p.def.push({sc:sc,d:S.day});p.stat.wait++;}else p.stat.drop++;
+  }
+  /* 補放延後的來訪 */
+  for(var j=0;j<p.def.length;j++){var e=p.def[j];
+   if(S.day-e.d>45){p.def.splice(j,1);j--;p.stat.drop++;continue;}
+   if(pend.length)break;
+   if(verdict(e.sc)==='ok'){p.def.splice(j,1);delete e.sc.pace;Pace.mark(e.sc.sp);p.stat.ok++;pend.push(e.sc);break;}
+  }
+  if(!pend.length)Pace.maybeIntro();
+ };
+ /* ---------- 初遇 ---------- */
+ function sponsor(id){for(var k in S.rel){if(S.rel[k].met>0&&NPC[k]&&k!==id&&alive(k)){var r=S.nrel[k+'>'+id];if(r&&r.b>=8)return true;}}return false;}
+ Pace.introCands=function(){
+  var out=[],d=Pace.days(),p=P(),here=hereNpcs();
+  for(var i=0;i<here.length;i++){var id=here[i],n=NPC[id];
+   if(n.child||Pace.knows(id)||(p.skip[id]!==undefined&&S.day-p.skip[id]<30))continue;
+   if(n.tier<=2){if(d<2)continue;}
+   else if(n.tier===3){if(d<Pace.graceOf(id)||!(S.p.rank>=1||S.p.st.rep>=10||sponsor(id)))continue;}
+   else {if(d<Math.round(Pace.grace()*1.5)||!(S.p.rank>=1||S.p.st.rep>=15||inPalace()))continue;}
+   out.push([id,n.tier<=1?3:n.tier===2?2:n.tier===3?1:0.5]);}
+  return out;};
+ Pace.maybeIntro=function(){
+  var p=P();if(S.scene&&S.scene.kind==='ending')return null;
+  if(S.day-p.intro<Pace.set().intro||S.day-p.g<Pace.gcd())return null;
+  if(!roll(55))return null;
+  var c=Pace.introCands();if(!c.length)return null;
+  var tot=0,i;for(i=0;i<c.length;i++)tot+=c[i][1];var r=rand()*tot,id=c[0][0];
+  for(i=0;i<c.length;i++){r-=c[i][1];if(r<=0){id=c[i][0];break;}}
+  p.intro=S.day;p.g=S.day;p.stat.intro++;
+  var sc=Pace.introScene(id);S.pending.push(sc);return sc;};
+ Pace.introScene=function(id){
+  var n=NPC[id];var th=(window.THEMES&&THEMES[S.p.spot])||'此處';
+  var t='【初遇】\n在'+th+'，一位你素不相識的人注意到了你。\n'+(n.bio?'（'+String(n.bio).slice(0,46)+'）\n':'')+'對方略一頷首：「在下'+n.n+'。看閣下面生，是新近到此的？」';
+  return scene(t,id,{bg:S.p.spot,kind:'event',tag:'初遇',ch:[ch('拱手回禮，結識一番','paceMeet',{id:id,k:'a'}),ch('客氣寒暄，不多言','paceMeet',{id:id,k:'b'}),ch('低頭走開','paceMeet',{id:id,k:'c'})]});
+ };
+ NODES.paceMeet=function(a){
+  var id=a.id,n=NPC[id];if(!n||!alive(id))return NODES.hub();
+  if(a.k==='c'){P().skip[id]=S.day;return resultScene('初遇','你低頭快步走開，對方望著你的背影，搖了搖頭。',id,S.p.spot);}
+  var r=R(id);r.met=1;r.re=clamp(r.re+3,0,100);addMem(id,'在'+((window.THEMES&&THEMES[S.p.spot])||'此處')+'初次與'+S.p.name+'相識。');
+  if(r.md===undefined)r.md=S.day;
+  var fx={days:1,rel:{}};fx.rel[id]=a.k==='a'?{af:3,tr:2}:{af:1};
+  var out=applyFx(fx);
+  return resultScene('初遇',(a.k==='a'?'你與'+n.n+'互通姓名，攀談了幾句，頗為投契。':'你與'+n.n+'客套了幾句，各自走開。')+'\n（'+n.n+'從此認得你了。）'+fxLine(out),id,S.p.spot);
+ };
+ /* 身世文字明寫「相識」的人物，開局即視為認識（生父母只是未相認，不算） */
+ var REL_RX=/(認識|相識|舊識|熟識|學生|弟子|徒弟|門生|學徒|同窗|同學|同僚|部下|屬下|老師|師父|恩師|恩人|義父|義母|養父|養母|收養|朋友|好友|摯友|結拜|義兄|義弟|青梅竹馬|侍奉|門客|門下|舊主|主公|效力|同鄉|鄰居|救過我|救了我)/;
+ var NEG_RX=/(不認識|不相識|素未謀面|從未見過|沒見過|未曾見|未見過|不曾見)/;
+ Pace.bgMet=function(raw){
+  raw=String(raw||'');var got=[];if(!raw||!S||!S.rel)return got;
+  for(var i=0;i<NPCS.length;i++){var n=NPCS[i];if(!alive(n.id)||n.child)continue;
+   var names=[n.n];if(n.c&&n.c.length>1)names.push(n.c);
+   for(var j=0;j<names.length;j++){var p=raw.indexOf(names[j]);if(p<0)continue;
+    var w=raw.slice(Math.max(0,p-8),p+names[j].length+8);
+    if(REL_RX.test(w)&&!NEG_RX.test(w)){var r=R(n.id);if(!r.met){r.met=1;r.md=S.day;r.tr=Math.max(r.tr,22);r.af=Math.max(r.af,16);addMem(n.id,'與'+S.p.name+'早年相識。');got.push(n.id);}break;}}}
+  return got;};
+ if(window.Origin&&Origin.apply){var _oa=Origin.apply;Origin.apply=function(raw,m){var r=_oa.apply(this,arguments);try{Pace.bgMet(raw);}catch(e){}return r;};}
+ /* ---------- 好感增長：初識期放緩 ---------- */
+ var _ar=addRel;
+ addRel=function(id,dim,d,memo){
+  try{if(d>1&&(dim==='af'||dim==='tr'||dim==='lo')&&S&&S.rel&&NPC[id]){var g=Pace.set().gain;
+    if(g<1){var r=S.rel[id];var young=Pace.days()<150||(r&&r.md!==undefined&&S.day-r.md<45);
+     if(young)d=Math.max(1,Math.round(d*g));}}}catch(e){}
+  return _ar(id,dim,d,memo);
+ };
+ /* ---------- 自設身世秘辛：慢擴散 ---------- */
+ Pace.sureN=function(f){var n=0;for(var K in f.kn){if(K!=='p'&&alive(K)&&f.kn[K]>=55)n++;}return n;};
+ Pace.holders=function(f){var n=0;for(var K in f.kn){if(K!=='p'&&alive(K)&&f.kn[K]>=15)n++;}return n;};
+ Pace.spread=function(f){
+  if(f.sub!=='p'||f.pub)return null;
+  var c=SPD[SET.diff]||SPD.normal;
+  return {min:55,cap:c.cap+(f.vis>=1?1:0),mulp:c.mulp*(f.vis>=1?1.8:1),bmax:48,delay:function(){return c.delay+rnd(6);}};
+ };
+ Pace.room=function(f,pz){
+  var p=P();if(p.sd.d===S.day&&p.sd.n>=1)return false;
+  if(S.day-(f.pz===undefined?-99:f.pz)<6)return false;
+  if(Pace.holders(f)>=pz.cap+4)return false;
+  return true;};
+ Pace.used=function(f){var p=P();if(p.sd.d!==S.day){p.sd.d=S.day;p.sd.n=0;}p.sd.n++;f.pz=S.day;};
+ /* learn：初期高層人物不得「識破」；記錄明確來源 */
+ var _ln=Facts.learn;
+ Facts.learn=function(K,f,via,b,quiet){
+  try{if(f&&f.sub==='p'&&NPC[K]){
+    if(via==='p'||Pace._force){f.exp=f.exp||{};f.exp[K]=1;}
+    else if(b>38&&(f.type==='identity'||f.kin==='parent'||f.kin==='child')){var g=Pace.graceOf(K);if(g&&Pace.days()<g)b=38;}}}catch(e){}
+  return _ln.call(this,K,f,via,b,quiet);
+ };
+ var TOLD=/給.{0,8}看|拿給|交給|遞給|展示|示之|讓.{1,4}看|告知|告訴|坦白|說出|透露|招供|供出|交代|出示|拿出|亮出|轉告|寫信|傳信|通知|託人|送信|稟報|稟告|密報|傳話|信中|書信/;
+ function findDup(e){var o=null;try{o=Facts.norm(e);}catch(x){}if(!o)return {o:null,d:null};var L=Facts.F().list;
+  for(var i=0;i<L.length;i++){var g=L[i];if(g.st==='refuted')continue;if(g.type===o.type&&g.sub===o.sub&&g.obj===o.obj&&g.kin===o.kin&&(g.kin!=='other'||g.t===o.t))return {o:o,d:g};}
+  return {o:o,d:null};}
+ Pace.guard=function(list,ctx){
+  if(!Array.isArray(list))return list;var out=[];
+  for(var i=0;i<list.length;i++){var e=list[i];
+   if(!e||typeof e!=='object'||Array.isArray(e)){out.push(e);continue;}
+   var fd=findDup(e),o=fd.o;
+   if(!o||o.sub!=='p'||(o.type!=='identity'&&o.type!=='secret')){out.push(e);continue;}
+   var c={};for(var k in e)c[k]=e[k];
+   var told=TOLD.test(String(e.text||e.t||'')+(ctx.scene||'')+(Pace._input||''))||(o.proof==='strong'&&Facts.proofCount(o)>0);
+   var d=fd.d,cap=d?(d.vis):1;
+   if(!told){
+    var want=o.vis;if(want>cap)c.vis=cap===0?'secret':'rumor';
+    var kb=[].concat(c.knownBy||c.kn||[]);var keep=[],lim=d?1:2;
+    for(var j=0;j<kb.length;j++){var K=Facts.resolve(kb[j]);if(!K||K==='p'){keep.push(kb[j]);continue;}
+     if(d&&d.kn[K]!==undefined){keep.push(kb[j]);continue;}
+     var near=R(K).met>0&&locOf(K)===S.p.region&&NPC[K]&&NPC[K].tier<=2&&Pace.days()>=Pace.graceOf(K);
+     if(near&&lim>0){keep.push(kb[j]);lim--;}else if(Facts.stat)Facts.stat.witDrop=(Facts.stat.witDrop||0)+1;}
+    c.knownBy=keep;delete c.kn;
+    if(Facts.stat)Facts.stat.paceGuard=(Facts.stat.paceGuard||0)+(kb.length-keep.length)+(want>cap?1:0);
+   }
+   out.push(c);}
+  return out;
+ };
+ var _ing=Facts.ingest;
+ Facts.ingest=function(list,ctx){
+  ctx=ctx||{};var src=ctx.src||'free';
+  var prevF=Pace._force;Pace._force=!!(ctx.force||src==='free'||src==='origin');
+  try{
+   if((src==='ai'||src==='polish')&&S&&S.x){
+    /* 玩家本人在輸入中明確「出示／告知」，或有強力憑據：視為有明確原因 */
+    var told=TOLD.test(String(Pace._input||''))||(Array.isArray(list)&&list.some(function(e){try{var o2=Facts.norm(e);return o2&&o2.proof==='strong'&&Facts.proofCount(o2)>0;}catch(x){return false;}}));
+    if(told)Pace._force=true;else list=Pace.guard(list,ctx);
+   }
+  }catch(e){}
+  try{return _ing.call(this,list,ctx);}finally{Pace._force=prevF;}
+ };
+ var _pa=Facts.postAI;
+ Facts.postAI=function(r,a){Pace._input=(a&&a.text)||'';try{return _pa.call(this,r,a);}finally{Pace._input='';}};
+ /* 玩家親手「昭告天下」才算明確公開 */
+ var _gp=Facts.goPublic;
+ Facts.goPublic=function(f,silent){if(f&&Pace._manual)f.pubBy='p';return _gp.call(this,f,silent);};
+ var _pf=PACT.factpub;
+ PACT.factpub=function(el){Pace._manual=1;try{_pf(el);}finally{Pace._manual=0;}};
+ /* ---------- 舊存檔：謠言平息 ---------- */
+ function explicitSet(f){
+  var ex={};if(f.exp)for(var k in f.exp)ex[k]=1;
+  var me=S.p.name;
+  for(var i=0;i<(f.hist||[]).length;i++){var t=f.hist[i].t||'';var m=t.match(/^(.+?)自(.+?)處得知$/);
+   if(m&&m[2]===me){for(var id in NPC)if(NPC[id].n===m[1])ex[id]=1;}}
+  /* 玩家見證／憑據認親者 */
+  if(f.ack&&f.obj)ex[f.obj]=1;
+  return ex;}
+ Pace.anomaly=function(){
+  var out=[];if(!S||!S.x||!S.x.facts)return out;var L=S.x.facts.list;
+  for(var i=0;i<L.length;i++){var f=L[i];if(f.sub!=='p'||f.st==='refuted'||f.calm)continue;
+   if(f.type!=='identity'&&f.type!=='secret'&&f.kin!=='parent')continue;
+   if(f.src==='ai'&&f.type!=='identity'&&f.kin!=='parent')continue;
+   var ex=explicitSet(f),non=[];
+   for(var K in f.kn){if(K==='p'||!alive(K)||f.kn[K]<30||ex[K])continue;non.push(K);}
+   var autoPub=f.pub&&!f.pubBy;
+   if(non.length>3||(autoPub&&non.length>=2))out.push({f:f,non:non,autoPub:autoPub});}
+  return out;};
+ Pace.audit=function(quiet){
+  var p=P();var an=Pace.anomaly();p.offer=an.map(function(x){return x.f.i;});
+  if(an.length&&!quiet&&!p.offerShown){p.offerShown=S.day;try{addLog('世間流言似乎傳得過廣，可在「秘密」面板使用一次「謠言平息」。');toast('🕊 身世流言傳得過廣，可到「秘密」使用「謠言平息」',3600);}catch(e){}}
+  return an;};
+ Pace.calm=function(){
+  var an=Pace.anomaly(),p=P(),fa=Facts.F(),total=0;
+  an.forEach(function(x){var f=x.f,ex=explicitSet(f);
+   var keep=0;
+   x.non.forEach(function(K){
+    if(keep<3&&f.kn[K]<55){keep++;return;}               /* 少數人仍聽過傳言 */
+    if(keep<3){f.kn[K]=Math.min(f.kn[K],44);keep++;total++;return;}
+    delete f.kn[K];total++;});
+   x.non.forEach(function(K){if(f.kn[K]!==undefined&&f.kn[K]>44)f.kn[K]=44;});
+   if(x.autoPub){f.pub=0;f.vis=1;f.pubBy='';}
+   else if(f.vis>1&&!f.pubBy){f.vis=1;}
+   for(var i=fa.pend.length-1;i>=0;i--){if(fa.pend[i].f===f.i&&!ex[fa.pend[i].to])fa.pend.splice(i,1);}
+   f.calm=1;f.risk=Facts.risk(f);
+   f.hist.push({d:S.day,t:'謠言平息：過度擴散的知情者降為傳聞'});
+   Facts.log('謠言平息：「'+String(f.t).slice(0,18)+'」——多數人只當是無稽之談，確知者減少。','chain',f.i);
+  });
+  if(an.length){p.stat.calm++;p.offer=[];addLog('你設法平息了流言：過度擴散的身世消息，如今多數人只當作無稽之談。');}
+  return {facts:an.length,demoted:total};};
+ PACT.pacecalm=function(){var r=Pace.calm();try{toast(r.facts?'🕊 謠言已平息':'目前沒有需要平息的流言');}catch(e){}openPanel('secret');};
+ var _psec=PANELS.secret;
+ PANELS.secret=function(){var h=_psec();
+  try{var an=Pace.anomaly();if(an.length){h='<div class="sec" style="border-color:#d9a24c"><h4>🕊 謠言平息（一次性）</h4><div class="hint">你的身世消息傳得過廣，知情者多半沒有明確來源。平息後，過度擴散的知情者會降為「聽說／存疑」的傳聞，並寫入日誌。</div><div class="acts" style="margin-top:6px"><button type="button" class="gobtn sm" data-act="pacecalm">使用謠言平息</button></div></div>'+h;}}catch(e){}
+  return h;};
+ /* ---------- 掛鉤：時間、讀檔 ---------- */
+ var _adv=advance;
+ advance=function(d){var n0=(S&&S.pending)?S.pending.length:0;_adv(d);try{if(S&&S.x&&d>0)Pace.post(n0);}catch(e){if(window.console)console.error('Pace',e);}};
+ var _fs=fixState;
+ fixState=function(st){st=_fs(st);return st;};
+ var _lo=loadObj;
+ loadObj=function(o){var r=_lo(o);try{if(S&&S.x)Pace.audit();}catch(e){}return r;};
+ /* ---------- 設定 ---------- */
+ (function(){var i;for(i=0;i<SETSCHEMA.length;i++){if(SETSCHEMA[i][0]==='h'&&/聲音與畫面/.test(SETSCHEMA[i][1]))break;}
+  var rows=[['h','🧭 劇情節奏'],['pace','select','劇情節奏（主線觸發、結識速度、好感增長）',[['slow','慢（預設・循序漸進）'],['mid','中'],['fast','快']]],['visitf','select','NPC 來訪頻率',[['low','少'],['mid','中（預設）'],['high','多']]]];
+  SETSCHEMA.splice.apply(SETSCHEMA,[i,0].concat(rows));})();
+ /* ---------- AI 提示 ---------- */
+ Pace.aiRule=function(){
+  var met=[];try{for(var k in S.rel){if(S.rel[k].met>0&&NPC[k]&&alive(k))met.push(nmx(k));}}catch(e){}
+  return '\n【劇情節奏】①開局時所有人物對玩家都是陌生人：未列於「已與玩家相識」的人物不認得玩家、不知其名與來歷，不得直呼其名或主動找上門；須先有「首次相遇」的小事件（偶遇、引見、買賣），之後才逐步熟絡。②前'+Pace.grace()+'日內，嬴政、呂不韋、太后等重大人物不得主動召見或找玩家，更不得識破玩家身世；先寫小人物、低階官吏、同僚。③好感循序增長，一次互動至多小幅提升，不可一見如故、當場託付。④同一人物不連日出現；一次劇情不要一口氣讓多人來訪。⑤玩家自設的身世與秘密，預設只有玩家自己知道；除非有明確原因（被目擊證物、說漏嘴、被審問、被調查），不得讓任何人得知；傳聞只能寫「有人議論／聽說」而非確定，effects 的 knownBy 一次至多一人，vis 不要寫成 public。⑥病發被人看見，只能引起懷疑與調查，不等於身世曝光。'+(met.length?'\n已與玩家相識：'+met.slice(0,14).join('、')+'。':'\n玩家目前尚未結識任何人物。');
+ };
+ var _wr=AI.worldRules;
+ AI.worldRules=function(short){var t=_wr(short);try{t+=short?'【節奏】開局人人與玩家陌生，須先有初遇事件；前'+Pace.grace()+'日重大人物不主動找玩家、不識破身世；玩家自設秘密預設只有玩家知道。':Pace.aiRule();}catch(e){}return t;};
+ var _sm=AI.summary;
+ AI.summary=function(){var s=_sm.apply(this,arguments);try{var met=[];for(var k in S.rel){if(S.rel[k].met>0&&NPC[k]&&alive(k))met.push(nmx(k));}s+='\n【相識名單】已與玩家相識：'+(met.slice(0,16).join('、')||'無')+'（其餘人物皆不認識玩家，須先有初遇事件）。';}catch(e){}return s;};
+ /* 診斷用 */
+ Pace.report=function(){var p=P();return {g:p.g,gcd:Pace.gcd(),ncd:Pace.ncd(),def:p.def.length,stat:p.stat,met:Object.keys(S.rel).filter(function(k){return S.rel[k].met>0&&NPC[k];}).length};};
 })();
 
 /* ---- 99_boot.js ---- */
