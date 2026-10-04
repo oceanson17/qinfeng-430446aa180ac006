@@ -2780,16 +2780,17 @@ AI.system=function(){
  +'規則：\n1. 一律使用繁體中文，古風、簡練、有畫面感；每幕約120-260字，可含NPC對白（用「」）。人物性格須符合其已知性格與當前關係數值（信任/好感/懷疑/恨意/愛慕/忠誠/恐懼/敬重）。\n'
  +'2. 只輸出一個JSON物件，不要Markdown、不要任何額外文字。\n'
  +'3. JSON格式：{"scene":"場景敘述與對話","speaker":"主要說話NPC的id，無則空字串","bg":"palace|chamber|garden|market|gate|water|study|battle|wild|prison|inn|tea|pharm|cloth|home之一",'
- +'"choices":[{"text":"選項文字(28字內)","fx":{}}],"fx":{},"intent":null}\n'
+ +'"choices":[{"text":"選項文字(28字內)","fx":{}}],"fx":{},"effects":[],"intent":null}\n'
  +'4. fx欄位皆可省略：{"st":{"wu":0,"zhi":0,"zheng":0,"mei":0,"tong":0,"rep":0,"stealth":0,"gold":0,"hp":0,"merit":0},"rel":{"npc_id":{"tr":0,"af":0,"su":0,"ha":0,"lo":0,"ly":0,"fe":0,"re":0}},"mem":{"npc_id":"該人物對此事的記憶短句"},"sus":[["a_id","b_id",數值]],"flags":{"自訂鍵":true},"days":天數,"news":"一句天下傳聞"}\n'
  +'數值上限：st每項±3（金錢±150、健康±15），rel每項±10，sus±20，days≤30。npc_id只能使用【人物】中提供的id。\n'
  +'5. choices 給出3到4個有意義且各異的選項（含謀略、武力、感情、退讓等方向），每個可附小幅fx。\n'
  +'6. 不得讓任何人物直接死亡、不得改寫已發生的結果；刺殺、計謀、書信的成敗由遊戲機制決定。若玩家想做這些，請在 intent 填寫：{"type":"assassinate|scheme|letter|travel","target":"npc_id","target2":"npc_id","scheme":"li|fan|jie|tiao|yao|mei|kong|du","kind":"hao|meng|zhao|ce|jie|wei|qing|wei2|qiu","to":"地區id"}，其餘情況 intent 為 null。地區id：xianyang,yong,hangu,beidi,shangdang,handan,xinzheng,daliang,linzi,shouchun,ji,bashu。\n'
- +'7. 難度：'+({easy:'爽玩（成功率與獎勵大幅提高，主角極難死亡）',normal:'普通',hard:'困難',hell:'地獄'}[SET.diff])+'；劇情自由度：'+({history:'貼近史實（少偏離）',balanced:'平衡',free:'高度自由（可大幅偏離史實並增加支線）'}[SET.free])+'。不要替玩家做決定。';
++'8. 世界事實（effects，可省略；通常為空陣列）：只有當玩家的行動或劇情「真正揭露或改變」身世、秘密、關係、處境時才填，最多2項：{"type":"identity|secret|relationship|status|event","subject":"p或npc_id","object":"npc_id或空字串","kin":"parent|child|spouse|lover|sibling|master|enemy|other","label":"未具名一方的身分（如公主）","text":"一句話事實","vis":"secret|rumor|public","knownBy":["npc_id"],"proof":"none|weak|strong","mag":1到3}。已故者不可為當事人或知情者；不可與【世間秘辛】矛盾；知情者與不知情者的反應必須不同。若玩家陳述了身世或秘密，請在 scene 中寫出知情者的反應，並在 effects 登記。\n'
+  +'7. 難度：'+({easy:'爽玩（成功率與獎勵大幅提高，主角極難死亡）',normal:'普通',hard:'困難',hell:'地獄'}[SET.diff])+'；劇情自由度：'+({history:'貼近史實（少偏離）',balanced:'平衡',free:'高度自由（可大幅偏離史實並增加支線）'}[SET.free])+'。不要替玩家做決定。';
 };
 AI.userMsg=function(a){
  var sum=AI.summary();var last=S.scene&&S.scene.t?S.scene.t.replace(/〔[^〕]*〕/g,'').slice(0,220):'';
- if(a.type==='free')return sum+'\n【上一幕】'+last+'\n\n【玩家行動】「'+a.text+'」\n請描寫行動的經過與結果（含適當的NPC反應），並給出後續選項。';
+ if(a.type==='free')return sum+'\n【上一幕】'+last+'\n\n【玩家行動】「'+a.text+'」'+(a.note?'\n【系統已將以下登記為世間事實，請據此描寫各人反應，勿質疑】\n'+a.note:'')+'\n請描寫行動的經過與結果（含適當的NPC反應），並給出後續選項。';
  if(a.type==='gen')return sum+'\n【上一幕】'+last+'\n\n請依世界狀態，推演下一幕：可為某人物來訪、一樁陰謀、一次兩難抉擇、感情進展或支線事件，並給出選項。';
  if(a.type==='polish'){var facts=(a.scene.t||'').replace(/\n*〔[^〕]*〕\s*$/,'');
   return sum+'\n\n【遊戲事實（結果已定，不可更改成敗、生死、數值）】\n'+facts+'\n\n請將以上事實改寫為生動的古風小說式場景，保留所有關鍵事實與人物名稱。'+(SET.aiMode==='full'?'可在 choices 給出0-2個與劇情契合的額外自由選項（可為空陣列）。':'choices 請給空陣列。');}
@@ -2893,6 +2894,7 @@ AI.validate=function(j,need){
  var t=j.scene||j.text||j.story;
  if(typeof t!=='string'||t.length<8)throw {kind:'schema'};
  var out={scene:t.replace(/^\s+|\s+$/g,''),speaker:(NPC[j.speaker]?j.speaker:''),bg:(THEMES[j.bg]?j.bg:''),choices:[],fx:AI.cleanFx(j.fx),intent:null};
+ out.effects=[];try{if(window.Facts)out.effects=Facts.cleanEffects(j.effects||j.facts||[]);}catch(e){out.effects=[];}
  if(j.choices&&j.choices.length){for(var i=0;i<j.choices.length&&out.choices.length<5;i++){var c=j.choices[i];if(!c)continue;var tx=typeof c==='string'?c:(c.text||c.label);if(typeof tx!=='string'||!tx)continue;out.choices.push({text:tx.slice(0,40),fx:AI.cleanFx(c.fx)});}}
  if(need==='choices'&&out.choices.length<2)throw {kind:'schema'};
  var it=j.intent;
@@ -2953,6 +2955,7 @@ AI.run=function(a){
    return sc;
   }
   if(r.fx)applyFx(r.fx,'ai');
+  var fres=null;if(r.effects&&r.effects.length&&window.Facts){try{fres=Facts.ingest(r.effects,{src:'ai'});}catch(e){if(window.console)console.error('Facts ai',e);}}
   var ch0=[];
   if(r.intent){var it=r.intent;
    if(it.type==='assassinate')ch0.push(ch('⚔ 付諸行動：刺殺'+nm(it.target),'assTarget',{id:it.target}));
@@ -2961,7 +2964,8 @@ AI.run=function(a){
    else if(it.type==='travel')ch0.push(ch('🧭 付諸行動：前往'+regionName(it.to),'travel',{to:it.to}));}
   for(var j=0;j<r.choices.length;j++)ch0.push({t:'✦ '+r.choices[j].text,go:'aiNext',a:{text:r.choices[j].text},fx:r.choices[j].fx,ai:1});
   ch0.push(ch('📜 行動選單','hub'));
-  return {t:r.scene,sp:r.speaker,bg:r.bg||S.p.spot,ch:ch0,kind:'event',ai:1};
+  var ftxt='';if(fres&&fres.lines.length)ftxt='\n\n〔秘辛・'+fres.lines.join('　')+'〕';
+  return {t:r.scene+ftxt,sp:r.speaker,bg:r.bg||S.p.spot,ch:ch0,kind:'event',ai:1};
  });
 };
 NODES.aiNext=function(a){
@@ -2985,6 +2989,7 @@ AI.test=function(){
 AI.systemShort=function(){
  return '你是「秦風」的故事主持人。'+AI.worldRules(1)+'請用繁體中文、古風簡練，只回覆一個JSON（可放在```json區塊內），格式：\n'
  +'{"scene":"場景與對話120-220字","speaker":"主要NPC的id或空","bg":"palace|chamber|garden|market|gate|water|study|battle|wild|prison|inn|tea|pharm|cloth|home","choices":[{"text":"選項28字內","fx":{}}],"fx":{"st":{"zhi":1},"rel":{"npc_id":{"af":3,"tr":2,"su":0,"ha":0,"lo":0,"ly":0,"fe":0,"re":0}},"mem":{"npc_id":"記憶短句"}},"intent":null}\n'
+ +'世界事實：如玩家行動揭露／改變了身世、秘密、關係、處境，請在JSON加 effects 陣列（最多2項）：{"type":"identity|secret|relationship|status|event","subject":"p或npc_id","object":"npc_id或空","kin":"parent|child|spouse|lover|sibling|master|enemy|other","label":"未具名一方（如公主）","text":"一句話事實","vis":"secret|rumor|public","knownBy":["npc_id"],"proof":"none|weak|strong","mag":1-3}；已故者不可為當事人或知情者。\n'
  +'規則：choices給3-4個各異選項；數值小幅(st±3,金±150,rel±10)；npc_id只能用下方【人物】的id；不得讓人直接死亡或改寫已定結果；刺殺/計謀/書信/遠行若玩家想做，在intent填{"type":"assassinate|scheme|letter|travel","target":"id","target2":"id","scheme":"li|fan|jie|tiao|yao|mei|kong|du","to":"地區id"}，否則為null。難度：'
  +({easy:'爽玩',normal:'普通',hard:'困難',hell:'地獄'}[SET.diff])+'；自由度：'+({history:'貼近史實',balanced:'平衡',free:'高度自由'}[SET.free])+'。';
 };
@@ -4266,6 +4271,7 @@ function choose(c){
   if(c.a&&c.a.u==='save'){openPanel('save');}
   else if(c.a&&c.a.u==='menu'){showMenu();}
   else if(c.a&&c.a.u==='offline'){if(UIs.offlineCb)UIs.offlineCb();}
+  else if(c.a&&c.a.u&&PANELS[c.a.u]){openPanel(c.a.u);}
   return;
  }
  if(!S)return;
@@ -14533,8 +14539,16 @@ var Court={};
  /* ---- 生成 ---- */
  function fillB(m,a){var c=C();var s=m.b;var fn=a&&a.fn?STN[a.fn]:'';if(m.ttl.indexOf('{fn}')>=0||s.indexOf('{fn}')>=0){}
   var cm=NPC[c.posts.taiwei]?NPC[c.posts.taiwei].n:'太尉';var rg=(a&&a.r)?regionName(a.r):regionName(pick(['xianyang','yong','hangu','beidi','shangdang','bashu']));
-  return s.replace(/\{fn\}/g,fn).replace(/\{r\}/g,rg).replace(/\{gr\}/g,c.gr).replace(/\{cm\}/g,cm);}
- function fillT(m,a){return m.ttl.replace(/\{fn\}/g,a&&a.fn?STN[a.fn]:'');}
+  return s.replace(/\{P\}/g,S.p.name).replace(/\{FACT\}/g,(window.Facts&&a&&a.f?Facts.text(a.f):'')).replace(/\{fn\}/g,fn).replace(/\{r\}/g,rg).replace(/\{gr\}/g,c.gr).replace(/\{cm\}/g,cm);}
+ function fillT(m,a){return m.ttl.replace(/\{P\}/g,S.p.name).replace(/\{fn\}/g,a&&a.fn?STN[a.fn]:'');}
+ Court.hooks={};
+ M('fact_inquire',{w:0,pl:1,cat:'宗',ttl:'查辦{P}身世之傳聞',fr:'neishi',b:'御史進言：「近來朝野有傳言：{FACT}。若屬實，關乎宗室血脈名分；若屬虛妄，亦不可任其流布。臣請裁斷。」',o:[
+  O('下令徹查',{pr:1},'有司領命而去，各處都有了查問的動靜。',{fn:'fq_probe'}),
+  O('召{P}入宮當面詢問',{},'旨意傳下，{P}不日便要入見。',{fn:'fq_summon'}),
+  O('留中不發，壓下傳言',{pr:-1},'奏摺被壓了下去，但流言並不會因此消失。',{fn:'fq_hush'})],def:2});
+ M('fact_shield',{w:0,pl:1,cat:'宗',ttl:'為{P}正名',fr:'neishi',b:'有大臣上書：「{P}之身世，坊間議論紛紛：{FACT}。其人於國有功，臣請明告天下，以安人心。」',o:[
+  O('準奏，明告天下',{pr:1,mx:1},'詔令頒下，身世之說一時傳遍朝野。',{fn:'fq_public'}),
+  O('暫且不議',{},'此事被擱置。')],def:1});
  Court.make=function(id,a,due){var m=MEM[id];if(!m)return null;var c=C();a=a||{};if(!a.r&&/\{r\}/.test(m.b))a.r=pick(['xianyang','yong','hangu','beidi','shangdang','bashu']);if(/\{fn\}/.test(m.b+m.ttl)&&!a.fn)a.fn=pickState()||'hn';
   var q={k:id,d:S.day,x:due||(S.day+60),a:a};c.q.push(q);c.seen[id]=S.day;return q;};
  function eligible(){var c=C(),pl=Court.level(),o=[];for(var id in MEM){var m=MEM[id];if(m.w<=0)continue;if(m.pl>pl)continue;if(c.seen[id]&&S.day-c.seen[id]<m.cd)continue;
@@ -14596,6 +14610,7 @@ var Court={};
   var a0=snap();ap(use.e);
   if(use.risk&&rollD(use.risk[0])){ap(use.risk[1]);}
   var fn=q.a.fn;
+  if(use.fn&&Court.hooks[use.fn]){try{Court.hooks[use.fn](q.a,use);}catch(e){if(window.console)console.error('court hook',e);}}
   /* 勢力關係（含外交）*/
   if(use.dip&&fn){var d=use.dip;ap({fr:(function(){var o2={};o2[fn]=d*8;return o2;})()});if(d>0)S.fac[fn].pw=clamp(S.fac[fn].pw-0.5,0,100);}
   if(use.front&&fn){var best=null;c.arm.forEach(function(a){if(a.at==='home'&&!best)best=a;});if(best){best.at=fn;best.mo=clamp(best.mo+4,0,100);}}
@@ -14606,8 +14621,8 @@ var Court={};
   (use.ch||[]).forEach(function(cc){Court.make(cc[0],{r:q.a.r,fn:fn},S.day+cc[1]+40);var qq=c.q[c.q.length-1];qq.d=S.day+cc[1];qq.hide=S.day+cc[1];});
   c.q.splice(qi,1);c.cnt++;
   if(m.cat==='災'){c.dis=c.dis.filter(function(d){return d.k!==q.k.slice(2)||d.r!==q.a.r;});}
-  var txt=note0+use.n.replace(/\{fn\}/g,STN[fn]||'');
-  note('「'+fillT(m,q.a)+'」：'+use.t.replace(/\{fn\}/g,STN[fn]||'')+(ok||pl>=3?'':'（上意）'),m.cat==='政'||m.cat==='災'?2:1);
+  var txt=note0+use.n.replace(/\{P\}/g,S.p.name).replace(/\{fn\}/g,STN[fn]||'');
+  note('「'+fillT(m,q.a)+'」：'+use.t.replace(/\{P\}/g,S.p.name).replace(/\{fn\}/g,STN[fn]||'')+(ok||pl>=3?'':'（上意）'),m.cat==='政'||m.cat==='災'?2:1);
   /* 玩家所得 */
   var ps={};if(pl>=2)ps.merit=2;else ps.merit=1;ps.inf=(pl>=2?1:0);
   S.p.st.merit+=ps.merit;if(ps.inf)S.p.st.inf+=ps.inf;if(ok&&pl<3)S.p.st.rep+=1;
@@ -14644,7 +14659,7 @@ var Court={};
   cs.push(ch('↩ 返回','cMain'));return scene(t,'',{kind:'menu',bg:'court',ch:cs});};
  function readScene(qi,chaoRest){var c=C();var x=c.q[qi];if(!x)return NODES.cMain();var m=MEM[x.k];var t=head()+'\n《'+fillT(m,x.a)+'》\n'+(NPC[m.fr]?nm(m.fr):(c.posts[m.fr]&&NPC[c.posts[m.fr]]?nm(c.posts[m.fr]):'有司'))+'呈上：\n'+fillB(m,x.a)+'\n';
   var cs=[];m.o.forEach(function(o,oi){var sup=(o.pro||[]).map(function(k){return GRP[k].slice(0,2);}),opp=(o.con||[]).map(function(k){return GRP[k].slice(0,2);});
-   var lab=(oi+1)+'. '+o.t.replace(/\{fn\}/g,STN[x.a.fn]||'')+(sup.length||opp.length?'　〔'+(sup.length?'贊:'+sup.join(''):'')+(opp.length?(sup.length?' ':'')+'反:'+opp.join(''):'')+'〕':'');
+   var lab=(oi+1)+'. '+o.t.replace(/\{P\}/g,S.p.name).replace(/\{fn\}/g,STN[x.a.fn]||'')+(sup.length||opp.length?'　〔'+(sup.length?'贊:'+sup.join(''):'')+(opp.length?(sup.length?' ':'')+'反:'+opp.join(''):'')+'〕':'');
    cs.push(ch(lab,'cDo',{qi:qi,oi:oi,n:chaoRest}));});
   cs.push(ch('🕑 留中不發（稍後再議）','cMemo'));
   return scene(t,'',{kind:'event',bg:'court',ch:cs});}
@@ -15256,7 +15271,7 @@ var V2={s:1,tx:0,ty:0,txT:0,bw:0,bh:0,dockH:150,mode:'',fb:false};
  };
  V2.toggleFb=function(on){if(on===undefined)on=!hasCls('fbopen');cls('fbopen',on);setTimeout(function(){V2.layout();},30);if(on){var f=id('free');if(f)setTimeout(function(){try{f.focus();}catch(e){}},50);}};
  /* ------------------------------------------------ 彈窗：圖示化分頁 ------------------------------------------------ */
- var TABIC={stats:'person',inv:'inv',skill:'skill',rel:'rel',log:'log',ach:'ach',world:'map',save:'save',set:'gear',end:'end',help:'help',court:'court',eaves:'ear',love:'love'};
+ var TABIC={stats:'person',inv:'inv',skill:'skill',rel:'rel',log:'log',ach:'ach',world:'map',save:'save',set:'gear',end:'end',help:'help',court:'court',eaves:'ear',love:'love',secret:'mask',book:'log'};
  var _sm=showModal;
  showModal=function(head,body){
   _sm(head,body);
@@ -15520,6 +15535,661 @@ var V2={s:1,tx:0,ty:0,txT:0,bw:0,bh:0,dockH:150,mode:'',fb:false};
    var bs=document.querySelectorAll('#mbody .mbtns .gobtn');
    for(var i=0;i<bs.length;i++){var b=bs[i];var k=b.getAttribute('data-act')||b.getAttribute('data-tab')||'';var nm={new:'sword',resume:'walk',cont:'save',save:'save',set:'gear',end:'end',help:'help'}[k];if(nm)b.innerHTML='<span style="margin-right:8px;opacity:.85">'+ic(nm)+'</span>'+V2.strip(b.textContent);}
  }catch(e){}};
+})();
+
+/* ---- 59_facts.js ---- */
+/* ===== 秦風 · 世界事實管線（Facts）：身世／秘密／關係／處境 → 全局狀態 ===== */
+var Facts={};
+(function(){
+ var TYPES={secret:'秘密',identity:'身世',relationship:'關係',status:'處境',item:'物證',event:'事件'};
+ var KINS={parent:'親生父母',child:'親生子女',sibling:'手足',spouse:'夫妻',lover:'私情',master:'師徒',enemy:'死敵',other:'其他'};
+ Facts.TYPES=TYPES;
+ function F(){var x=S.x;if(!x.facts)x.facts={ver:1,list:[],seq:1,log:[],pend:[],goal:{},hush:{},cnt:{learn:0,react:0,chain:0},obsN:0};return x.facts;}
+ Facts.F=F;
+ function nmx(id){return id==='p'?S.p.name:(NPC[id]?NPC[id].n:'某人');}
+ function age(id){if(id==='p')return S.p.age;var n=NPC[id];return n?n.age+(OPT().page===0?0:Math.floor((S.stat.days||0)/360)):30;}
+ function royal(lab){return /公主|王姬|太后|王后|王妃|公子|王孫|王子|宗室|先王|大王/.test(lab||'');}
+ function byId(i){var L=F().list;for(var k=0;k<L.length;k++)if(L[k].i===i)return L[k];return null;}
+ Facts.get=byId;
+ function sexOf(id){return NPC[id]?NPC[id].sex:'m';}
+ /* ---------- 名稱解析 ---------- */
+ var ALIAS={'仲父':'lbw','相邦':'lbw','文信侯':'lbw','秦王':'yingzheng','大王':'yingzheng','王上':'yingzheng','太后':'zhaoji','長信侯':'laoai','假父':'laoai'};
+ function mentionsAll(text){
+  var found=[],used={};
+  function add(p,len,id){if(p<0||used[id])return;used[id]=1;found.push({p:p,e:p+len,id:id});}
+  for(var i=0;i<NPCS.length;i++){var n=NPCS[i];if(n.hidden&&!S.flags.kh_seen)continue;var p=text.indexOf(n.n);if(p>=0){add(p,n.n.length,n.id);continue;}
+   if(n.c&&n.c.length>1){p=text.indexOf(n.c);if(p>=0){add(p,n.c.length,n.id);continue;}}
+   if(n.n.length>2){p=text.indexOf(n.n.slice(1));if(p>=0)add(p,n.n.length-1,n.id);}}
+  for(var a in ALIAS){var q=text.indexOf(a);if(q>=0&&NPC[ALIAS[a]])add(q,a.length,ALIAS[a]);}
+  found.sort(function(x,y){return x.p-y.p;});return found;
+ }
+ Facts.mentions=mentionsAll;
+ function resolveId(v){
+  if(v===undefined||v===null)return '';v=String(v).replace(/^\s+|\s+$/g,'');
+  if(!v)return '';if(v==='p'||v==='player'||v==='玩家'||v==='我'||v===S.p.name)return 'p';
+  if(NPC[v])return v;for(var i=0;i<NPCS.length;i++){if(NPCS[i].n===v||NPCS[i].c===v)return NPCS[i].id;}return '';
+ }
+ /* ---------- 正規化（AI 與離線解析共用的格式）---------- */
+ Facts.norm=function(e){
+  if(!e||typeof e!=='object'||Array.isArray(e))return null;
+  var o={type:TYPES[e.type]?e.type:'secret'};
+  o.sub=resolveId(e.subject!==undefined?e.subject:(e.sub!==undefined?e.sub:'p'))||'p';
+  o.obj=resolveId(e.object!==undefined?e.object:(e.obj||''));
+  o.kin=KINS[e.kin]?e.kin:'other';
+  o.lab=String(e.label||e.lab||'').slice(0,12);
+  o.t=String(e.text||e.t||'').replace(/\s+/g,' ').slice(0,140);
+  o.vis=({secret:0,rumor:1,public:2})[e.vis]!==undefined?({secret:0,rumor:1,public:2})[e.vis]:(typeof e.vis==='number'?clamp(Math.round(e.vis),0,2):0);
+  o.truth=e.truth===false||e.truth===0?0:1;
+  o.kn=[];var kb=e.knownBy||e.kn||[];if(!Array.isArray(kb))kb=[kb];
+  for(var i=0;i<kb.length&&o.kn.length<6;i++){var id=resolveId(kb[i]);if(id&&o.kn.indexOf(id)<0)o.kn.push(id);}
+  o.proof=(e.proof==='strong'||e.proof==='weak')?e.proof:'none';
+  var m=+e.mag;o.mag=isNaN(m)?2:clamp(Math.round(m),1,3);
+  if(e.rank!==undefined){var rk=+e.rank;if(!isNaN(rk)&&rk)o.rank=rk>0?1:-1;}
+  if(e.quest&&typeof e.quest==='object'&&e.quest.t)o.quest={t:String(e.quest.t).slice(0,20),d:String(e.quest.d||'').slice(0,80)};
+  if(e.goal&&typeof e.goal==='object'){var gi=resolveId(e.goal.npc||e.goal.id);if(gi&&gi!=='p'&&/^(pw|sf|lv|rv|wl)$/.test(e.goal.g||''))o.goal={id:gi,g:e.goal.g};}
+  if(e.flag&&typeof e.flag==='string')o.flag=e.flag.replace(/[^\w]/g,'').slice(0,20);
+  if(e.item&&/^(keepsake|evid|letter)$/.test(e.item))o.item=e.item;
+  if(!o.t){o.t=Facts.defText(o);}
+  if(o.t.length<4)return null;
+  return o;
+ };
+ Facts.defText=function(o){
+  if(o.type==='identity'&&o.kin==='parent'&&o.sub==='p')return S.p.name+'是'+(o.obj?nmx(o.obj):'某位貴人')+(o.lab?'與'+o.lab:'')+'所生之子女';
+  if(o.kin==='lover')return nmx(o.sub)+'與'+(o.obj?nmx(o.obj):'某人')+'有不可告人的私情';
+  if(o.obj)return nmx(o.sub)+'與'+nmx(o.obj)+'之間有不為人知的隱情';
+  return nmx(o.sub)+'有一樁不為人知的秘密';
+ };
+ /* ---------- 驗證（正史、可能性、難度上限）---------- */
+ Facts.validate=function(o){
+  function no(r){return {ok:false,reason:r};}
+  if(!o)return no('格式無效');
+  if(o.sub!=='p'){if(!NPC[o.sub])return no('查無此人');if(!alive(o.sub))return no(nmx(o.sub)+'已故，無法成為當事人');}
+  if(o.obj){if(!NPC[o.obj])return no('查無此人');if(!alive(o.obj))return no(nmx(o.obj)+'已故，無法成為此事的當事人');}
+  if(o.sub===o.obj)return no('當事人重複');
+  if(o.type==='relationship'&&o.sub!=='p'&&!o.obj)return no('缺少對象');
+  var dead=[];o.kn=o.kn.filter(function(k){if(k==='p')return true;if(!alive(k)){dead.push(k);return false;}return true;});
+  if(o.kin==='parent'||o.kin==='child'){
+   var par=o.kin==='parent'?o.obj:o.sub,kid=o.kin==='parent'?o.sub:o.obj;
+   if(o.sub==='p'&&!o.obj&&!o.lab)return no('未指明血親是誰');
+   if(par&&NPC[par]&&NPC[par].child)return no(nmx(par)+'年紀太小，不可能是你的親生'+(o.kin==='parent'?'父母':'子女'));
+   if(par&&kid&&age(par)-age(kid)<14)return no('年齡不合：'+nmx(par)+'不可能是'+nmx(kid)+'的親生父母');
+   if(o.sub==='p'&&o.kin==='parent'&&o.obj){
+    var L=F().list;for(var i=0;i<L.length;i++){var g=L[i];if(g.kin==='parent'&&g.sub==='p'&&g.st==='true'&&g.obj&&g.obj!==o.obj&&sexOf(g.obj)===sexOf(o.obj))return no('你的'+(sexOf(o.obj)==='f'?'生母':'生父')+'已確定是'+nmx(g.obj));}
+   }
+  }
+  o.mag=Math.min(o.mag,({easy:3,normal:3,hard:2,hell:2})[SET.diff]||3);
+  if(o.rank){var need=0;try{need=rankNeed();}catch(e){}
+   if(SET.diff==='hell'||SET.diff==='hard'){delete o.rank;}
+   else if(S.p.rank>=4||(o.rank>0&&SET.diff==='normal'&&S.p.st.merit<need*0.6))delete o.rank;
+   else if(S.x.facts&&S.x.facts.rkDay&&S.day-S.x.facts.rkDay<30)delete o.rank;}
+  return {ok:true,o:o,dead:dead};
+ };
+ /* 憑據數：與對象相關的證據／信物 */
+ Facts.proofCount=function(o){
+  var n=0;try{var v=S.x.inv&&S.x.inv.it?S.x.inv.it:[];for(var i=0;i<v.length;i++){var it=v[i];var m=it.meta||{};
+   if(it.k==='evid'&&o.obj&&m.about===o.obj)n++;else if(it.k==='keepsake'&&o.obj&&m.of===o.obj)n++;}}catch(e){}
+  return n;
+ };
+ /* 可信度：爽玩寬鬆，困難需要憑據與機會 */
+ Facts.plaus=function(o,src){
+  var p=({easy:88,normal:58,hard:36,hell:22})[SET.diff]||58;
+  if(src==='ai')p+=18;
+  p+=Math.min(44,Facts.proofCount(o)*24);
+  if(o.proof==='strong')p+=16;else if(o.proof==='weak')p+=7;
+  if(o.obj&&NPC[o.obj]){var r=S.rel[o.obj];if(r&&r.met)p+=6;if(r&&r.tr>=40)p+=6;if(locOf(o.obj)===S.p.region)p+=4;
+   if(o.kin==='parent'&&NPC[o.obj].tier>=5)p-=18;}
+  if(royal(o.lab))p-=8;
+  p-=(o.mag-1)*(SET.diff==='easy'?3:8);
+  return clamp(Math.round(p),5,97);
+ };
+ /* ---------- 建立／合併 ---------- */
+ function findDup(o){var L=F().list;for(var i=0;i<L.length;i++){var g=L[i];if(g.st==='refuted')continue;if(g.type===o.type&&g.sub===o.sub&&g.obj===o.obj&&g.kin===o.kin&&(g.kin!=='other'||g.t===o.t))return g;}return null;}
+ function logC(t,k,fid,obs){var f=F();f.log.push({d:S.day,t:t,k:k||'fx',f:fid||0,o:obs===false?0:1});if(f.log.length>80)f.log.shift();}
+ Facts.log=logC;
+ function observable(K,f){
+  if(f.vis>=1)return true;if(K==='p'||f.pk&&f.obs&&f.obs[K])return true;
+  if(NPC[K]&&locOf(K)===S.p.region&&NPC[K].tier>=2)return true;
+  try{if(window.World&&World.intel&&World.intel()>=2)return true;}catch(e){}
+  return false;
+ }
+ Facts.ingest=function(list,ctx){
+  ctx=ctx||{};var src=ctx.src||'free';var res={items:[],lines:[],rej:[]};
+  if(!Array.isArray(list))return res;
+  if(!S||!S.x)return res;
+  for(var i=0;i<list.length&&i<3;i++){
+   var o=null;try{o=Facts.norm(list[i]);}catch(e){}
+   if(!o){res.rej.push('格式無效');continue;}
+   var v=Facts.validate(o);
+   if(!v.ok){res.rej.push(v.reason);res.lines.push('（無法成立：'+v.reason+'）');continue;}
+   if(v.dead&&v.dead.length)res.lines.push('（'+v.dead.map(nmx).join('、')+'已不在人世，無從得知此事。）');
+   var pl=Facts.plaus(o,src);var good=pl>=70||roll(pl);
+   if(o.proof==='strong'&&!good&&roll(40))good=true;
+   var d=findDup(o),f;
+   var st=good?'true':'claim';
+   if(d){f=d;if(st==='true'&&f.st==='claim'){f.st='true';f.tr=1;}f.vis=Math.max(f.vis,o.vis);f.mag=Math.max(f.mag,o.mag);}
+   else{
+    var fa=F();f={i:fa.seq++,type:o.type,sub:o.sub,obj:o.obj,kin:o.kin,lab:o.lab,t:o.t,tr:good?1:0,st:st,vis:o.vis,kn:{},pk:1,obs:{},ev:Facts.proofCount(o),d:S.day,src:src,mag:o.mag,flag:o.flag||'',hist:[{d:S.day,t:'錄入（'+(good?'屬實':'未證實')+'）'}],ack:0,risk:0};
+    fa.list.push(f);if(fa.list.length>40){for(var z=0;z<fa.list.length;z++){if(fa.list[z].st==='refuted'||fa.list[z].vis===0&&!Object.keys(fa.list[z].kn).length){fa.list.splice(z,1);break;}}}
+   }
+   var newly=[];
+   for(var k=0;k<o.kn.length;k++){var K=o.kn[k];if(K==='p'){f.pk=1;continue;}
+    if(f.kn[K]===undefined||f.kn[K]<(good?92:48)){var wasNew=f.kn[K]===undefined;Facts.learn(K,f,'',good?92+rnd(8):48+rnd(10),true);if(wasNew)newly.push(K);}
+    f.obs[K]=1;}
+   if(!d){Facts.applyOnce(f,o,res);}
+   else if(good&&d.st==='true'&&!d.applied){Facts.applyOnce(f,o,res);}
+   if(o.rank&&good){S.p.rank=clamp(S.p.rank+o.rank,0,4);S.p.title=titleOf();F().rkDay=S.day;res.lines.push('官職變動：'+S.p.title);addLog('因身世／秘辛之事，你的官職變為「'+S.p.title+'」');}
+   if(o.goal&&alive(o.goal.id)){F().goal[o.goal.id]={g:o.goal.g,until:S.day+90};res.lines.push(nmx(o.goal.id)+'的心思轉向了「'+(World&&World.GN?World.GN[o.goal.g]:o.goal.g)+'」');}
+   if(o.quest){addQuest({id:'fqx_'+f.i,t:o.quest.t,d:o.quest.d});}
+   if(o.item){var ik=o.item;try{if(ik==='keepsake'&&o.obj){INV.add('keepsake',{meta:{of:o.obj},own:'p',how:'取得',who:'p',force:1});f.ev++;res.lines.push('你得到了'+nmx(o.obj)+'的信物。');}
+     else if(ik==='evid'){INV.makeEvidence(o.obj||o.sub,f.t.slice(0,16),2,'取得');f.ev++;res.lines.push('你掌握了一份物證。');}}catch(e){}}
+   f.risk=Facts.risk(f);
+   res.items.push({f:f,st:f.st,pl:pl,dup:!!d,newly:newly});
+   var tl=(good?'【屬實】':'【未證實】')+'「'+f.t+'」';
+   res.lines.unshift(tl+'〔可信度約'+pl+'%〕');
+   if(f.sub==='p'&&f.kin==='parent'&&f.obj&&good&&!d)res.lines.push('你的身世在這個世界中成為了事實：'+nmx(f.obj)+(f.lab?'與'+f.lab:'')+'之'+(S.p.gender==='f'?'女':'子')+'。');
+   if(!good)res.lines.push('缺少憑據，旁人只當作傳聞妄語。找到信物或證據（出示給當事人）後可轉為屬實。');
+   for(var q=0;q<newly.length;q++){var rl=Facts.reactLine(newly[q],f);if(rl)res.lines.push(rl);}
+   logC('錄入：'+f.t+(good?'（屬實）':'（未證實）'),'new',f.i);
+  }
+  try{HUD.update();}catch(e){}
+  return res;
+ };
+ /* 一次性、對玩家與世界的直接影響 */
+ Facts.applyOnce=function(f,o,res){
+  if(f.st!=='true'){return;}
+  f.applied=1;
+  var mag=f.mag||2,fx={st:{}};
+  if(f.type==='identity'&&f.kin==='parent'&&f.sub==='p'){
+   S.p.blood={p:f.obj||'',lab:f.lab||'',day:S.day,legit:/私生|庶|外室|私通/.test(f.t)?0:1};
+   if(f.obj)S.flags['blood_'+f.obj]=S.day;S.flags.route_blood=S.day;
+   var hi=(f.obj&&NPC[f.obj]&&NPC[f.obj].tier>=4)||royal(f.lab);
+   if(hi){S.flags.route_heir=S.day;}
+   fx.st.rep=1+mag;fx.st.inf=mag;
+   if(!hasQuest('fq_'+f.i)){addQuest({id:'fq_'+f.i,t:'身世之謎',d:'你的身世（'+nmx(f.obj||'p')+(f.lab?'與'+f.lab:'')+'）已成為事實。設法讓'+(f.obj?nmx(f.obj):'相關之人')+'承認你，並留意知情者的動向。'});}
+   if(res)res.lines.push('出身改寫：'+(S.p.blood.legit?'嫡':'私生')+'血脈，聲望／權勢略增'+(hi?'；「奪嫡」路線解鎖':'')+'。');
+  }else if(f.type==='status'||f.type==='event'){
+   if(/殺|刺|毒|盜|偷|竊|謀反|通敵|細作|奸細|逃/.test(f.t)){S.p.wanted=clamp(S.p.wanted+Math.round(4*mag),0,100);fx.bounty=0;if(res)res.lines.push('通緝度上升（此事若傳開對你不利）。');}
+  }else if(f.type==='relationship'){
+   if(f.sub!=='p'&&f.obj){nrSus(f.sub,f.obj,6*mag);}
+  }
+  if(f.flag)S.flags['fact_'+f.flag]=S.day;
+  applyFx(fx,'ai');
+  if(f.vis>=2)Facts.goPublic(f,true);
+  S.flags['fact_n']=(S.flags['fact_n']||0)+1;
+ };
+ /* ---------- 風險 ---------- */
+ Facts.risk=function(f){
+  var s=0,n=0;for(var K in f.kn){if(!alive(K))continue;n++;var N=NPC[K];var b=f.kn[K]/100;var w=0.6+N.tier*0.3;var st=Facts.stance(K,f);
+   if(st==='exploit'||st==='foe')w*=1.8;else if(st==='protect'||st==='friend'||st==='kin')w*=0.4;s+=w*b;}
+  s+=f.vis*3;if(f.vis>=2)s+=6;
+  return Math.round(s*10)/10;
+ };
+ Facts.riskLabel=function(f){var r=f.risk;return r>=7?'極高':r>=4?'高':r>=2?'中':'低';};
+ /* ---------- 立場 ---------- */
+ Facts.stance=function(K,f){
+  if(!NPC[K])return 'gossip';
+  if(f.sub==='p'&&f.kin==='parent'&&K===f.obj)return 'kin';
+  if(K===f.sub&&f.sub!=='p')return 'self';
+  var n=NPC[K];var party=f.sub==='p'?f.obj:f.sub;
+  if(K===S.emp&&(royal(f.lab)||(party&&NPC[party]&&NPC[party].tier>=4)))return 'ruler';
+  if(f.type==='status'||f.type==='event'){if(n.tier>=3&&n.hon>=60&&K!==S.emp&&regard(K)<35)return 'law';}
+  if(party&&NPC[party]&&K!==party){var r=NR(K,party);
+   if(r.b>=15||(facOf(K)===facOf(party)&&facOf(K)!=='none'&&r.su<30))return 'protect';
+   if(r.b<=-15||r.su>=40)return 'exploit';}
+  var g=regard(K);if(g>=30)return 'friend';if(g<=-15||R(K).ha>=30)return 'foe';
+  return 'gossip';
+ };
+ var SL={kin:'親人',self:'當事人',ruler:'君上',law:'執法',protect:'庇護',exploit:'覬覦',friend:'同情',foe:'敵視',gossip:'旁觀'};
+ Facts.stanceLabel=function(s){return SL[s]||'旁觀';};
+ /* ---------- 學到：記入知識、反應 ---------- */
+ Facts.learn=function(K,f,via,b,quiet){
+  if(!NPC[K]||!alive(K))return false;
+  b=clamp(Math.round(b),10,100);
+  if(f.kn[K]!==undefined&&f.kn[K]>=b)return false;
+  var first=f.kn[K]===undefined;f.kn[K]=b;
+  if(!first){Facts.react(K,f,b,true);return true;}
+  F().cnt.learn++;
+  f.hist.push({d:S.day,t:nmx(K)+(via?'自'+nmx(via)+'處':'')+'得知'});if(f.hist.length>20)f.hist.shift();
+  Facts.react(K,f,b,false);
+  f.risk=Facts.risk(f);
+  if(!quiet){
+   var obs=observable(K,f);var minor=f.vis>=2&&NPC[K].tier<3&&K!==f.obj&&K!==S.emp;
+   if(minor){return true;}
+   var msg=nmx(K)+'已得知「'+(b>=55?f.t:Facts.hearsay(f,b))+'」'+(via?'（消息自'+nmx(via)+'處傳來）':'');
+   logC(msg,'learn',f.i,obs);
+   var fa0=F();if(obs&&(NPC[K].tier>=2||K===f.obj)&&fa0.toastDay!==S.day&&typeof toast==='function'){fa0.toastDay=S.day;try{toast('🗝 秘辛擴散：'+nmx(K)+'已得知你的秘密',3200);}catch(e){}}
+   try{if(window.World&&World.W){var w=World.W();w.hear.push({d:S.day,t:'風聲：'+nmx(K)+'似乎已聽聞了關於'+nmx(f.sub)+'的秘辛',k:'fact',src:'fact'});if(w.hear.length>50)w.hear.shift();}}catch(e){}
+  }
+  return true;
+ };
+ Facts.hearsay=function(f,b){
+  var t=f.t;if(b<35)return '有人在暗地裡議論'+nmx(f.sub)+'的來歷';if(b<55)return '傳言：'+t.replace(/親生/g,'疑為').replace(/是/,'似是');return t;
+ };
+ /* ---------- 反應矩陣 ---------- */
+ var RX={
+  parentKind:{kin:{tr:8,af:10,su:-4,re:5},protect:{tr:3,af:3,re:4},friend:{tr:2,af:2,re:3},exploit:{su:6,re:2},foe:{su:8,ha:3},ruler:{su:10,re:3,fe:3},law:{su:4,re:2},gossip:{re:3,af:1}},
+  secretKind:{self:{su:12,fe:4,tr:-5},law:{su:12,tr:-6,fe:4},protect:{tr:4,af:3,su:-2},friend:{tr:3,af:3,su:-2},exploit:{su:8,ha:2,re:1},foe:{su:8,ha:3},ruler:{su:8,tr:-3},gossip:{su:3,tr:-1,re:1}}
+ };
+ Facts.react=function(K,f,b,again){
+  var n=NPC[K];if(!n||!alive(K))return;
+  var st=Facts.stance(K,f);var m=RX[(f.kin==='parent'||f.kin==='child')&&f.sub==='p'?'parentKind':'secretKind'][st]||{};
+  var scale=(0.35+0.65*b/100)*(f.mag/2)*(f.st==='true'?1:0.5);if(again)scale*=0.3;
+  if(f.type==='relationship'&&f.sub!=='p'&&f.obj){
+   /* 兩人之間的隱情：旁人對當事人的看法也會改變 */
+   if(K!==f.sub&&K!==f.obj){nrSus(K,f.sub,Math.round(3*scale*2));nrSus(K,f.obj,Math.round(3*scale*2));}
+   else{addRel(K,'su',Math.round(8*scale),null);addRel(K,'fe',Math.round(3*scale),null);addRel(K,'tr',-Math.round(4*scale),null);}
+   if(!again)addMem(K,'聽說了一樁秘辛：'+f.t.slice(0,28));
+   return;
+  }
+  var any=0;for(var d in m){var v=Math.round(m[d]*scale);if(v){addRel(K,d,v,null);any=1;}}
+  if(f.st==='claim'&&K===f.obj&&f.sub==='p'){addRel(K,'su',Math.round(5*scale),null);}
+  if(!again){addMem(K,'得知了關於'+(f.sub==='p'?S.p.name:nmx(f.sub))+'的秘辛：'+f.t.slice(0,30));R(K).met=R(K).met||0;F().cnt.react++;
+   Facts.plot(K,f,st,b);}
+ };
+ /* ---------- 劇情鉤子 ---------- */
+ function chain(step,f,K,days){qpush(Math.max(1,days),'fact',{s:step,f:f.i,k:K});F().cnt.chain++;}
+ Facts.plot=function(K,f,st,b){
+  var n=NPC[K],easy=SET.diff==='easy',hard=SET.diff==='hard'||SET.diff==='hell';
+  if(f.st==='refuted')return;
+  var key=K+':'+f.i;var fa=F();fa.done=fa.done||{};
+  function once(tag){var k=key+tag;if(fa.done[k])return false;fa.done[k]=1;return true;}
+  if(st==='kin'&&f.sub==='p'&&b>=45&&once('kin')){chain('kin',f,K,4+rnd(5));return;}
+  if(st==='ruler'&&once('sum')){chain('summon',f,K,3+rnd(6));try{if(Court.level()>=1)Court.make('fact_inquire',{f:f.i},S.day+40);}catch(e){}return;}
+  if(st==='exploit'&&n.amb>=55&&n.tier>=2&&b>=50&&once('blk')&&roll(easy?35:60)){fa.goal[K]={g:'wl',until:S.day+60};chain('black',f,K,6+rnd(9));return;}
+  if((st==='foe'||st==='exploit')&&n.cru>=60&&f.mag>=2&&n.tier>=2&&f.sub==='p'&&b>=55&&once('sil')&&roll(easy?8:(hard?32:20))){fa.goal[K]={g:'rv',until:S.day+90};chain('silence',f,K,10+rnd(16));return;}
+  if((st==='protect'||st==='friend')&&n.tier>=2&&b>=50&&once('ofr')&&roll(55)){chain(roll(50)?'offer':'warn',f,K,3+rnd(8));return;}
+  if(st==='law'&&f.type==='status'&&once('law')){S.p.wanted=clamp(S.p.wanted+3,0,100);return;}
+ };
+ /* 公開 */
+ Facts.goPublic=function(f,silent){
+  if(f.pub)return;f.pub=1;f.vis=2;
+  var t=nmx(f.sub)+'的秘辛已傳遍天下：'+f.t;
+  try{addNews(t+'。');}catch(e){}
+  logC('秘辛公開：'+f.t,'public',f.i);
+  var ids=[];for(var i=0;i<NPCS.length;i++){var id=NPCS[i].id;if(alive(id)&&!NPCS[i].child&&f.kn[id]===undefined)ids.push(id);}
+  for(i=0;i<ids.length;i++){if(NPC[ids[i]].tier>=3||roll(55))F().pend.push({to:ids[i],from:'',f:f.i,due:S.day+1+rnd(10),b:70+rnd(25)});}
+  if(f.sub==='p'&&f.kin==='parent'){S.p.st.rep=clamp(S.p.st.rep+3,0,100);}
+  if(!silent&&typeof toast==='function'){try{toast('📢 你的身世已傳遍天下',3500);}catch(e){}}
+ };
+ /* ---------- 每日傳播 ---------- */
+ function gossip(K){var n=NPC[K];return clamp(0.25+(100-n.sus)/220+(100-n.hon)/420+n.mei/500,0.12,0.85);}
+ Facts.tickDay=function(){
+  if(!S||!S.x||!S.x.facts)return;var fa=F();
+  /* 到期的傳遞 */
+  for(var i=fa.pend.length-1;i>=0;i--){var p=fa.pend[i];if(p.due>S.day)continue;fa.pend.splice(i,1);var f=byId(p.f);if(!f||f.st==='refuted')continue;if(!alive(p.to))continue;if(p.from&&fa.hush[p.from]>S.day)continue;Facts.learn(p.to,f,p.from,p.b);}
+  for(i=0;i<fa.list.length;i++){var f2=fa.list[i];if(f2.st==='refuted')continue;
+   var kn=Object.keys(f2.kn).filter(function(k){return alive(k)&&f2.kn[k]>=30;});
+   if(f2.vis>=1&&f2.sub==='p'&&kn.length===0){continue;}
+   var cap=Math.min(kn.length,6);
+   for(var j=0;j<cap;j++){var K=kn[j];if(fa.hush[K]>S.day)continue;
+    var stn=Facts.stance(K,f2);var mult=(stn==='protect'||stn==='friend'||stn==='kin'||stn==='self')?0.3:((stn==='exploit'||stn==='foe')?1.6:(stn==='ruler'?0.6:1));
+    var ch0=[0.05,0.1,0.2][f2.vis]*gossip(K)*mult;
+    if(f2.vis===2)ch0=Math.min(0.5,ch0*2);
+    if(rand()>=ch0)continue;
+    var tgt=pickRecipient(K,f2);if(!tgt)continue;
+    var pb=clamp(f2.kn[K]-6-rnd(22),15,100);
+    fa.pend.push({to:tgt,from:K,f:f2.i,due:S.day+1+rnd(4),b:pb});
+   }
+   if(f2.vis>=2&&rand()<0.5){var ids=[];for(var q=0;q<NPCS.length;q++){var id=NPCS[q].id;if(alive(id)&&!NPCS[q].child&&f2.kn[id]===undefined)ids.push(id);}
+    for(q=0;q<3&&ids.length;q++){var pi=rnd(ids.length);fa.pend.push({to:ids[pi],from:'',f:f2.i,due:S.day+1+rnd(3),b:60+rnd(30)});ids.splice(pi,1);}}
+   f2.risk=Facts.risk(f2);
+   if(f2.vis<2&&Object.keys(f2.kn).length>=9&&!f2.pub){Facts.goPublic(f2);}
+  }
+  for(var h in fa.hush){if(fa.hush[h]<=S.day)delete fa.hush[h];}
+  for(var g in fa.goal){if(fa.goal[g].until<=S.day)delete fa.goal[g];}
+  checkHooks();
+ };
+ function pickRecipient(K,f){
+  var cand=[],ws=[],tot=0;
+  for(var i=0;i<NPCS.length;i++){var x=NPCS[i].id;if(x===K||!alive(x)||NPCS[i].child||f.kn[x]!==undefined)continue;
+   var w=0.3+Math.max(0,NR(K,x).b)/18;if(locOf(x)===locOf(K))w+=1.2;if(facOf(x)===facOf(K)&&facOf(K)!=='none')w+=0.8;if(x===f.obj)w+=1.2;if(NPCS[i].tier>=3)w+=0.3;
+   if(Facts.stance(K,f)==='exploit'&&(x===S.emp||x===f.obj))w+=2;
+   cand.push(x);ws.push(w);tot+=w;}
+  if(!cand.length)return '';var r=rand()*tot;for(i=0;i<cand.length;i++){r-=ws[i];if(r<=0)return cand[i];}return cand[cand.length-1];
+ }
+ /* ---------- 結局／路線檢查 ---------- */
+ function checkHooks(){
+  var L=F().list;for(var i=0;i<L.length;i++){var f=L[i];
+   if(f.st==='true'&&f.sub==='p'&&f.kin==='parent'&&f.ack&&f.vis>=1&&!S.flags.fact_heirq&&(S.flags.route_heir)){
+    S.flags.fact_heirq=S.day;addQuest({id:'fq_heir',t:'奪嫡之路',d:'你的血脈已獲承認。是回歸家門、潛龍在淵，還是憑此染指權位？多結盟友、積累官階與聲望，時機成熟時局勢會自己給出答案。'});
+    logC('「奪嫡」之路向你敞開。','chain',f.i);}}
+ }
+ Facts.checkEnding=function(){
+  if(!S.x||!S.x.facts)return null;var L=F().list;
+  for(var i=0;i<L.length;i++){var f=L[i];if(f.st!=='true'||f.sub!=='p'||f.kin!=='parent')continue;
+   if(f.ack&&f.vis>=2&&S.p.rank>=2&&S.endings.indexOf('fact_known')<0)return 'fact_known';
+   if(f.ack&&f.vis>=2&&S.p.rank>=4&&S.p.st.inf>=60&&royal(f.lab)&&S.endings.indexOf('fact_heir')<0)return 'fact_heir';}
+  return null;
+ };
+ /* ---------- 工具：即時反應台詞 ---------- */
+ Facts.reactLine=function(K,f){
+  var n=NPC[K];if(!n||!alive(K))return '';var st=Facts.stance(K,f);var N=n.n;var cl=f.st==='true';
+  var T={
+   kin:[N+'沉默良久，眼底有什麼東西翻湧：「你……竟是我的骨肉？」',N+'臉色數變，終於低聲道：「此事……不可讓第三人知道。」'],
+   self:[N+'瞳孔一縮，看你的眼神變得危險：「你，是從哪裡知道的？」'],
+   ruler:[N+'面無表情，手指卻在案上敲了一下：「此事，寡人記下了。」'],
+   law:[N+'皺起眉頭：「若此事屬實，便不是小事。」'],
+   protect:[N+'嘆了口氣：「既然如此，往後我會多照看你幾分。」'],
+   friend:[N+'神色柔和了些：「難怪……你放心，我不會說出去。」'],
+   exploit:[N+'嘴角微微一動，像是掂量著這個消息能換多少好處。'],
+   foe:[N+'冷冷地看著你：「原來如此，這可是個好把柄。」'],
+   gossip:[N+'挑了挑眉，似乎對這個消息頗感興趣。']
+  };
+  var a=T[st]||T.gossip;return (cl?'':'（半信半疑）')+a[rnd(a.length)];
+ };
+ /* ---------- 查詢 ---------- */
+ Facts.about=function(K){var out=[],L=F().list;for(var i=0;i<L.length;i++){var f=L[i];if(f.st!=='refuted'&&f.kn[K]!==undefined)out.push(f);}return out;};
+ Facts.aboutPlayer=function(K){return Facts.about(K).filter(function(f){return f.sub==='p'||f.obj==='p';});};
+ Facts.text=function(i){var f=byId(i);return f?f.t:'';};
+ Facts.hushed=function(K){return F().hush[K]>S.day;};
+ /* ---------- 正史備忘錄 ---------- */
+ Facts.canonLines=function(c){
+  if(!S||!S.x||!S.x.facts||!S.x.facts.list.length)return [];
+  var L=S.x.facts.list.filter(function(f){return f.st!=='refuted';}).slice(-8),out=['◆世間秘辛（已定事實，AI 與任何文字不得與之矛盾；知情者與不知情者的言行須有差別）：'];
+  for(var i=0;i<L.length;i++){var f=L[i];var kn=[],hs=[];
+   for(var K in f.kn){if(!alive(K))continue;(f.kn[K]>=55?kn:hs).push(nmx(K));}
+   out.push('・'+(f.st==='true'?'【屬實】':'【未證實／傳聞】')+f.t+'；'+({0:'秘密',1:'已有傳聞',2:'天下皆知'})[f.vis]+'；確知者：'+(kn.join('、')||'僅玩家')+(hs.length?'；半信半疑／聽過傳言者：'+hs.join('、'):'')+(f.ack?'；已獲親人承認':'')+'。未列名者並不知情，不得突然提及。');}
+  if(S.p.blood){out.push('◆玩家出身（已改寫）：'+(S.p.blood.p?nmx(S.p.blood.p):'某人')+(S.p.blood.lab?'與'+S.p.blood.lab:'')+'所生'+(S.p.blood.legit?'':'的私生')+(S.p.gender==='f'?'女':'子'));}
+  return out;
+ };
+ var _cb=Canon.block;
+ Canon.block=function(compact){var s=_cb(compact);try{var L=Facts.canonLines(compact);if(L.length)s+='\n'+L.join('\n');}catch(e){if(window.console)console.error('facts canon',e);}return s;};
+ Canon.RULES+='\nJ. 「世間秘辛」所列為已定事實：知情者的態度與台詞須體現他們知道；未列名者不知情，絕不可讓他們提起或暗示。玩家自述的身世／秘密若未見於秘辛，請在 effects 中登記，不要自行當成人人皆知。\n';
+ Canon.RULES_SHORT+='「世間秘辛」為已定事實，知情者須有相應態度，不知情者不可提及。';
+ /* ---------- 掛鉤：每日、問候、談話 ---------- */
+ var _dh=dayHook;dayHook=function(){_dh();try{Facts.tickDay();}catch(e){if(window.console)console.error('Facts day',e);}};
+ var _ce=checkEnding;checkEnding=function(){var r=_ce();if(r)return r;try{var k=Facts.checkEnding();if(k)return endingScene(k);}catch(e){}return null;};
+ var _gl=greetLine;
+ greetLine=function(id){
+  try{var L=Facts.aboutPlayer(id);if(L.length&&alive(id)){var f=L[L.length-1];var b=f.kn[id];var st=Facts.stance(id,f);
+   var G={kin:['「……你來了。」他看你的眼神，多了一分難以言說的複雜。','「坐。這些年……苦了你了。」'],protect:['「你的事我聽說了。有我在，旁人不敢輕易動你。」'],friend:['「你的身世我已知曉，放心，我嘴很嚴。」'],
+    exploit:['「喲，這不是『大人物』的後人嗎？」他笑得意味深長。'],foe:['「哼，攀上了高枝，就不一樣了？」他冷笑。'],ruler:['「你……就是那個人。」他的聲音聽不出情緒。'],law:['「你的事，我聽說了一些。」他審視著你。'],self:['「你知道得太多了。」他目光不善。'],gossip:['「聽說了你的事，真是教人意外。」']};
+   if(b>=50&&G[st])return fmt(pick(G[st]),{P:S.p.name});
+   if(b>=25)return fmt('「……（他看你的目光裡，有一絲探究）」',{P:S.p.name});}}catch(e){}
+  return _gl(id);
+ };
+ var _tm=NODES.talkMenu;
+ NODES.talkMenu=function(a){
+  var sc=_tm(a);
+  try{if(sc&&sc.ch&&a&&a.id&&alive(a.id)){var id=a.id,L=F().list,know=Facts.aboutPlayer(id),mine=L.filter(function(f){return f.pk&&f.st!=='refuted'&&f.sub==='p'&&f.kn[id]===undefined;});
+    if(know.length||mine.length){var pos=Math.max(0,sc.ch.length-1);sc.ch.splice(pos,0,ch('🗝 談起身世／秘辛'+(know.length?'（他似乎知道些什麼）':''),'factTalk',{id:id},null,{g:'深入'}));}
+    if(know.length&&sc.t.indexOf('察覺')<0){var f0=know[know.length-1];sc.t+='\n（你察覺到：'+nmx(id)+'對你的態度，與知道你的秘密有關。）';}
+  }}catch(e){}
+  return sc;
+ };
+ /* ---------- AI 登記 ---------- */
+ Facts.cleanEffects=function(arr){
+  var out=[];if(!Array.isArray(arr))return out;
+  for(var i=0;i<arr.length&&out.length<3;i++){var e=arr[i];if(!e||typeof e!=='object'||Array.isArray(e))continue;
+   var c={};['type','subject','object','kin','label','text','vis','proof','flag','item'].forEach(function(k){if(typeof e[k]==='string')c[k]=e[k].slice(0,140);});
+   if(typeof e.mag==='number')c.mag=e.mag;if(typeof e.truth==='boolean')c.truth=e.truth;
+   if(Array.isArray(e.knownBy))c.knownBy=e.knownBy.filter(function(x){return typeof x==='string';}).slice(0,6);
+   if(typeof e.rank==='number')c.rank=e.rank;
+   if(e.quest&&typeof e.quest==='object')c.quest=e.quest;if(e.goal&&typeof e.goal==='object')c.goal=e.goal;
+   if(c.text||c.object||c.subject)out.push(c);}
+  return out;
+ };
+})();
+
+/* ---- 60_facts2.js ---- */
+/* ===== 秦風 · 世界事實管線（二）：離線自由輸入解析、劇情鉤子、談話、秘密面板 ===== */
+(function(){
+ function F(){return Facts.F();}
+ function nmx(id){return id==='p'?S.p.name:(NPC[id]?NPC[id].n:'某人');}
+ var KIN=/私生子|私生女|私生|親生|親骨肉|骨肉|血脈|血親|生父|生母|親爹|親娘|親爸|之子|之女|的兒子|的女兒|後人|後裔|身世|認親/;
+ var DISC=/發現|得知|知道|知曉|察覺|查出|查到|看出|認出|識破|猜到|獲悉|明白|探知|聽說|相認/;
+ var ROLES=['公主','王姬','太后','王后','王妃','貴妃','夫人','貴人','宮女','王子','公子','王孫','先王','將軍'];
+ function royal(l){return /公主|王姬|太后|王后|王妃|公子|王孫|王子|宗室|先王|大王/.test(l||'');}
+ function visOf(t){return /天下皆知|人盡皆知|昭告天下|公開|傳遍|滿城風雨/.test(t)?'public':(/傳聞|謠言|流言|風聲|有人說|坊間/.test(t)?'rumor':'secret');}
+ function proofOf(t){return /信物|玉佩|玉璧|玉珏|血書|遺書|親筆信|憑證|證據|胎記|族譜|憑據|鐵證/.test(t)?'strong':(/據說|或許|可能|猜測|大概/.test(t)?'none':'none');}
+ /* ---------- 離線解析：自由輸入 → 與 AI 相同格式的 effects ---------- */
+ Facts.parse=function(text){
+  var t=String(text||'').replace(/\s+/g,'');var out=[];if(!t||!S||!S.x)return out;
+  var ms=Facts.mentions(t);
+  var hasKin=KIN.test(t);
+  var label='';for(var i=0;i<ROLES.length;i++){if(t.indexOf(ROLES[i])>=0){label=ROLES[i];break;}}
+  /* A. 身世／血親 */
+  if(hasKin&&(ms.length||label)&&!/殺|毒|刺/.test(t.replace(/殺父|殺母/g,'')) ){
+   var par=null,disc=[];
+   for(i=0;i<ms.length;i++){var tail=t.slice(ms[i].e,ms[i].e+16);
+    if(/^[^發得知察查看認識猜獲明聽探]{0,12}?(?:的)?(?:私生|親生|親骨肉|骨肉|血脈|之子|之女|兒子|女兒|後人|後裔)/.test(tail)||/^(?:其實)?(?:是|乃)我的?(?:生父|生母|親爹|親娘|親爸|親生父親|親生母親)/.test(tail)){par=ms[i];break;}}
+   for(i=0;i<ms.length;i++){var w=t.slice(ms[i].e,ms[i].e+7),b4=t.slice(Math.max(0,ms[i].p-3),ms[i].p);
+    if(DISC.test(w)||/(?:讓|使|告訴|通知|傳給|被)$/.test(b4)&&DISC.test(t))disc.push(ms[i].id);}
+   if(!par&&disc.length&&/他|她/.test(t.slice(ms[0].e))&&disc.length===1)par=ms.filter(function(m){return m.id===disc[0];})[0];
+   if(!par&&ms.length&&!disc.length)par=ms[0];
+   if(!par&&ms.length&&disc.length&&ms.length>disc.length)par=ms.filter(function(m){return disc.indexOf(m.id)<0;})[0];
+   if(par||label){
+    var pid=par?par.id:'';var tier=pid&&NPC[pid]?NPC[pid].tier:0;
+    var ill=/私生|庶出|外室|私通/.test(t);
+    out.push({type:'identity',subject:'p',object:pid,kin:'parent',label:label,vis:visOf(t),knownBy:disc.filter(function(x,k,a){return a.indexOf(x)===k;}),proof:proofOf(t),mag:(royal(label)||tier>=4)?3:2,
+     text:S.p.name+'是'+(pid?nmx(pid):'某位貴人')+(label&&pid?'與'+label:(label?'（'+label+'）':''))+'所生的'+(ill?'私生':'親生')+(S.p.gender==='f'?'女':'子')});
+    return out;
+   }
+  }
+  /* B. 私情 */
+  if(/私通|私情|有染|通姦|偷情|相好|姦情|苟且|幽會|有一腿|暗通款曲/.test(t)&&ms.length){
+   var a1=ms[0].id,b1=ms.length>1?ms[1].id:'p';
+   var kb=[];if(DISC.test(t)||/我(?:看到|撞見|親眼)/.test(t))kb=['p'];
+   out.push({type:'relationship',subject:a1,object:b1,kin:'lover',vis:visOf(t),knownBy:kb,mag:2,text:nmx(a1)+'與'+(b1==='p'?S.p.name:nmx(b1))+'有不可告人的私情'});
+   return out;
+  }
+  /* C. 玩家自述另一種來歷 */
+  var m1=t.match(/我(?:其實|原來|本來|竟|才)?(?:是|乃)(韓|趙|魏|楚|齊|燕|秦)(?:國)?(?:的)?(王孫|公子|公主|貴族|後裔|遺孤|細作|奸細|間諜|刺客)/);
+  if(m1){var kb2=[];for(i=0;i<ms.length;i++){var w2=t.slice(ms[i].e,ms[i].e+7);if(DISC.test(w2))kb2.push(ms[i].id);}
+   out.push({type:'identity',subject:'p',object:'',kin:'other',label:m1[2],vis:visOf(t),knownBy:kb2,mag:2,proof:proofOf(t),text:S.p.name+'其實是'+m1[1]+'國的'+m1[2]});return out;}
+  /* D. 把柄／罪行 */
+  var cr=t.match(/我(?:殺了|殺死|下毒|偷了|盜取|謀反|通敵|是刺客|是奸細|是細作|是逃犯|越獄|劫了|盜了)([^，。,]{0,8})/);
+  if(cr&&ms.length&&DISC.test(t)){var kb3=[];for(i=0;i<ms.length;i++){var w3=t.slice(ms[i].e,ms[i].e+7);if(DISC.test(w3))kb3.push(ms[i].id);}
+   if(!kb3.length)kb3=[ms[0].id];
+   out.push({type:'status',subject:'p',object:'',kin:'other',vis:visOf(t),knownBy:kb3,mag:2,text:S.p.name+cr[0].slice(1)});return out;}
+  /* E. 一般秘密 */
+  if(/秘密|把柄|醜事|底細|真面目|真實身分|來歷|內情/.test(t)&&DISC.test(t)&&ms.length){
+   var kb4=[];for(i=0;i<ms.length;i++){if(DISC.test(t.slice(ms[i].e,ms[i].e+7)))kb4.push(ms[i].id);}if(!kb4.length)kb4=[ms[0].id];
+   out.push({type:'secret',subject:'p',object:'',kin:'other',vis:visOf(t),knownBy:kb4,mag:1,text:S.p.name+'有一樁不為人知的秘密被'+nmx(kb4[0])+'察覺'});return out;}
+  return out;
+ };
+ /* ---------- 結果場景 ---------- */
+ function resultText(text,res){
+  var h='「'+String(text).slice(0,50)+'」\n';
+  if(!res.items.length&&res.lines.length===0)return h+'此事並未在世間掀起任何波瀾。';
+  return h+res.lines.join('\n');
+ }
+ NODES.factResult=function(a){
+  var lines=a.lines||[];
+  return resultScene('秘辛・身世','「'+String(a.text||'').slice(0,50)+'」\n'+lines.join('\n')+'\n\n（詳見「秘密」面板。）','',S.p.spot,[ch('🗝 查看秘密／身世','ui',{u:'secret'}),ch('繼續','hub')]);
+ };
+ var _ft=NODES.freeText;
+ NODES.freeText=function(a){
+  var t=String((a&&a.text)||'');var eff=[];
+  try{eff=Facts.parse(t);}catch(e){if(window.console)console.error('Facts.parse',e);}
+  if(!eff.length)return _ft(a);
+  var res=Facts.ingest(eff,{src:'free',text:t});
+  var o=applyFx({days:1});
+  if(SET.ai&&AI.ready()){
+   var sc=_ft(a);
+   if(sc&&sc.async){sc.async.note=res.lines.join('\n');sc.async.fb={go:'factResult',a:{text:t,lines:res.lines}};}
+   return sc;
+  }
+  var sc2=NODES.factResult({text:t,lines:res.lines});
+  sc2.t+=fxLine(o);return sc2;
+ };
+ /* ---------- 劇情鉤子（佇列）---------- */
+ function get(i){return Facts.get(i);}
+ function sc(t,K,chs,bg){return scene(t,K||'',{bg:bg||'chamber',kind:'event',ch:chs});}
+ QH.fact=function(a){
+  var f=get(a.f);if(!f||f.st==='refuted')return null;var K=a.k;if(K&&!alive(K))return null;var n=NPC[K];if(!n&&a.s!=='x')return null;var N=n?n.n:'';
+  var mag=f.mag||2;
+  if(a.s==='kin'){
+   var warm=n.hon>=50||regard(K)>=25;
+   return sc('【密召】\n'+(warm?N+'派人悄悄請你到一處僻靜的院落。屏退左右後，'+N+'望著你許久，聲音微啞：「那件事……我已經知道了。你，想要什麼？」':N+'召你到密室，門一關上，目光便冷了下來：「有人告訴我一件事。你最好老實說——你究竟是誰？想要什麼？」'),K,
+    [ch('叩首相認，陳述原委','factDo',{op:'kin_accept',f:f.i,k:K}),ch('只求庇護，暫不公開','factDo',{op:'kin_hide',f:f.i,k:K}),ch('呈上信物／憑據','factDo',{op:'kin_proof',f:f.i,k:K}),ch('不認，轉身離去','factDo',{op:'kin_deny',f:f.i,k:K})]);}
+  if(a.s==='offer'){
+   return sc('【援手】\n'+N+'遣人送來一封短箋與一個小包袱：「知道了你的事，往後若有難處，可來找我。」',K,[ch('收下，致謝','factDo',{op:'offer_take',f:f.i,k:K}),ch('婉拒，不欠人情','factDo',{op:'offer_no',f:f.i,k:K})]);}
+  if(a.s==='warn'){
+   return sc('【示警】\n'+N+'私下攔住你，壓低聲音：「你的事，已有人在打聽。小心身邊的人。」',K,[ch('追問是誰','factDo',{op:'warn_ask',f:f.i,k:K}),ch('道謝離去','factDo',{op:'warn_ok',f:f.i,k:K})]);}
+  if(a.s==='black'){
+   var gold=60+mag*50;
+   return sc('【要脅】\n'+N+'堵住了你的去路，笑容不懷好意：「你的底細，我知道了。這種事若傳出去……你說，值多少？」\n（對方開價：'+gold+'金）',K,
+    [ch('破財消災（-'+gold+'金）','factDo',{op:'black_pay',f:f.i,k:K,g:gold}),ch('強硬拒絕','factDo',{op:'black_no',f:f.i,k:K}),ch('反威脅：讓他閉嘴','factDo',{op:'black_threat',f:f.i,k:K})]);}
+  if(a.s==='silence'){
+   return sc('【殺機】\n深夜，窗外傳來極輕的響動——有人要讓你永遠閉嘴。疑是'+N+'所遣。',K,
+    [ch('抄起兵刃迎戰','factDo',{op:'sil_fight',f:f.i,k:K}),ch('藏身暗處脫身','factDo',{op:'sil_flee',f:f.i,k:K}),ch('設陷反擒刺客','factDo',{op:'sil_trap',f:f.i,k:K})],'wild');}
+  if(a.s==='summon'){
+   return sc('【宣召】\n宮中傳來口諭：'+N+'要見你。大殿上氣氛凝重，'+N+'緩緩開口：「有人說，你是'+f.t.replace(S.p.name,'你')+'。是真是假？」',K,
+    [ch('據實以告','factDo',{op:'sum_truth',f:f.i,k:K}),ch('矢口否認','factDo',{op:'sum_deny',f:f.i,k:K}),ch('呈上憑據','factDo',{op:'sum_proof',f:f.i,k:K})],'palace');}
+  return null;
+ };
+ function hasProofFor(K){var v=S.x.inv&&S.x.inv.it?S.x.inv.it:[];for(var i=0;i<v.length;i++){var it=v[i],m=it.meta||{};if((it.k==='evid'&&m.about===K)||(it.k==='keepsake'&&m.of===K))return it;}return null;}
+ function done(title,txt,K,more){return resultScene(title,txt,K||'',S.p.spot,(more||[]).concat([ch('繼續','hub')]));}
+ function prove(f){if(f.st==='true')return;f.st='true';f.tr=1;f.hist.push({d:S.day,t:'獲得憑據，轉為屬實'});if(!f.applied)Facts.applyOnce(f,null,null);Facts.log('「'+f.t+'」已被證實','prove',f.i);}
+ function questDone(f){questState('fq_'+f.i,'done');}
+ NODES.factDo=function(a){
+  var f=get(a.f);if(!f)return done('','此事已無下文。');var K=a.k,n=NPC[K],N=n?n.n:'',op=a.op,mag=f.mag||2,fx={days:1,st:{},rel:{}};
+  if(K&&n)fx.rel[K]={};
+  function rel(d){if(K)for(var k in d)fx.rel[K][k]=(fx.rel[K][k]||0)+d[k];}
+  var txt='',title='身世',ok;
+  if(op==='kin_accept'||op==='kin_hide'){
+   var p=50+(n.hon||50)/4+regard(K)/3+diffMod()-(f.st==='true'?0:25)+(f.ev?12:0);ok=rollD(p);
+   if(ok){f.ack=1;rel({tr:10,af:8,ly:3,su:-6});fx.st.rep=3;fx.st.merit=6+mag*2;if(op==='kin_hide'){F().hush[K]=S.day+150;}
+    S.flags['ack_'+K]=S.day;prove(f);questDone(f);
+    txt=N+'許久不語，終於伸手扶起你：「起來。這件事，我認了。」\n'+(op==='kin_hide'?'他壓低聲音：「但絕不可聲張。我會為你安排，你且忍耐。」':'他的眼中有愧意，也有算計：「往後，你便是我這一脈的人。」');
+    Facts.log(N+'私下承認了你的血脈'+(op==='kin_hide'?'，並要你守口如瓶':''),'chain',f.i);
+    qpush(14+rnd(10),'fact',{s:'offer',f:f.i,k:K});
+   }else{rel({su:5,tr:-2});txt=N+'打量你許久，搖頭：「空口無憑。若無憑據，今日之言我只當未聽見。」\n（提示：取得對方的信物或證據後再來；或先與他培養信任。）';}
+   if(ok&&/家|門下|歸/.test('')){}
+  }
+  else if(op==='kin_proof'){
+   var it=hasProofFor(K);
+   if(it||f.ev>0){f.ev++;prove(f);f.ack=1;rel({tr:12,af:8,ly:3,su:-10});fx.st.rep=3;fx.st.merit=8;S.flags['ack_'+K]=S.day;f.kn[K]=100;questDone(f);
+    txt=N+'接過'+(it&&it.k==='keepsake'?'信物':'憑據')+'，手指微微發顫：「……是它。不會錯了。」他長嘆一聲，認下了你。';Facts.log(N+'見憑據後承認了你的血脈','chain',f.i);qpush(10+rnd(8),'fact',{s:'offer',f:f.i,k:K});}
+   else{rel({su:3});txt='你身上並沒有能證明身世的信物或證據。（可到「秘密」面板設法尋找，或在對話中向對方索取。）';}
+  }
+  else if(op==='kin_deny'){rel({af:-3});txt='你轉身離去。'+N+'沒有挽留，但目光久久沒有移開。';}
+  else if(op==='offer_take'){fx.st.gold=60+mag*50;fx.st.merit=8;rel({tr:4,af:3});
+   var need=0;try{need=rankNeed();}catch(e){}
+   if(f.ack&&n.tier>=4&&S.p.rank<3&&S.p.st.merit+8>=need*0.7&&!(F().rkDay&&S.day-F().rkDay<60)){S.p.rank++;S.p.title=titleOf();F().rkDay=S.day;txt='你收下了。'+N+'還遞來一道薦書，讓你得以破格擢升：「'+S.p.title+'」。';}
+   else txt='你收下了他的心意：金錢、人情與一句承諾。';
+   if(f.ack&&S.p.fac==='none'&&facOf(K)!=='none'&&FACTIONS[facOf(K)]){S.p.fac=facOf(K);txt+='\n你被收入'+FACTIONS[facOf(K)].n.replace(/·.*/,'')+'門下，從此有了靠山。';}}
+  else if(op==='offer_no'){rel({re:6,tr:2});fx.st.rep=1;txt='你婉拒了。'+N+'若有所思：「有骨氣。」';}
+  else if(op==='warn_ask'){
+   var ks=Object.keys(f.kn).filter(function(k){return k!==K&&alive(k)&&f.kn[k]>=30;});var who=ks.length?ks[rnd(ks.length)]:'';
+   if(who){f.obs[who]=1;txt=N+'低聲說：「我聽到的風聲，是從'+nmx(who)+'那邊傳出來的。」';Facts.log('得知'+nmx(who)+'知曉你的秘密','learn',f.i);}else txt=N+'搖頭：「還只是風聲，沒有確切的人。」';rel({tr:2});}
+  else if(op==='warn_ok'){rel({tr:2,af:2});txt='你謝過，加倍留心。';}
+  else if(op==='black_pay'){fx.st.gold=-(a.g||100);F().hush[K]=S.day+90;rel({su:-2,re:-2});txt='你付了錢。'+N+'數了數，笑道：「我嘴最嚴了。」（他三個月內不會再傳播此事——但也可能再來。）';
+   if(roll(25))qpush(40+rnd(20),'fact',{s:'black',f:f.i,k:K});}
+  else if(op==='black_no'){rel({ha:6,su:4});txt=N+'臉色一沉：「好，你可別後悔。」';
+   if(roll(60)){F().pend.push({to:pickOther(f,K),from:K,f:f.i,due:S.day+2+rnd(3),b:Math.max(30,(f.kn[K]||60)-8)});txt+='\n（他很可能把消息賣給了別人。）';}}
+  else if(op==='black_threat'){var pw=40+pStat('wu')*0.35+pStat('stealth')*0.25+diffMod()-(n.cru>60?10:0);ok=rollD(pw);
+   if(ok){rel({fe:14,ha:3,su:2});F().hush[K]=S.day+150;txt='你湊近他耳邊低語了幾句。'+N+'臉色發白，連連點頭：「我什麼也沒聽過。」';}
+   else{rel({ha:12,su:8});txt=N+'冷笑：「嚇唬我？」他的眼神變得危險。';
+    if(roll(40))qpush(8+rnd(10),'fact',{s:'silence',f:f.i,k:K});}}
+  else if(op==='sil_fight'||op==='sil_flee'||op==='sil_trap'){
+   var st=op==='sil_fight'?pStat('wu'):(op==='sil_flee'?pStat('stealth'):pStat('zhi'));var pp=34+st*0.5+diffMod();ok=rollD(pp);
+   if(ok){var sl=op==='sil_fight'?'你拼死格殺了刺客':(op==='sil_flee'?'你借夜色脫身':'你設陷擒下了刺客');txt=sl+'。';
+    if(op!=='sil_flee'){INV.makeEvidence(K,'派人行刺滅口',3,'擒獲刺客');txt+='刺客身上搜出了線索——你得到了指證'+N+'的證據。';}
+    rel({su:6,fe:5});fx.st.rep=1;}
+   else{fx.st.hp=-(14+rnd(14)+mag*3);txt='你沒能全身而退，身上添了傷。';rel({ha:4});}
+   var ap=applyFx(fx);if(S.p.st.hp<=0)return endingScene('fact_silenced');fx=null;
+   return done('殺機',txt+fxLine(ap),K);}
+  else if(op==='sum_truth'||op==='sum_deny'||op==='sum_proof'){
+   var rp=45+(f.st==='true'?20:-12)+S.p.st.rep/6+diffMod();
+   if(op==='sum_proof'){var it2=hasProofFor(f.obj||K);if(it2||f.ev>0){rp+=28;f.ev++;}else rp-=8;}
+   if(op==='sum_deny')rp=(f.st==='true'&&(f.kn[K]||0)>=70)?18:55;
+   ok=rollD(rp);
+   if(op==='sum_deny'){if(ok){rel({su:-2});txt=N+'盯了你片刻，最終揮手：「退下。」此事暫且擱下。';}else{rel({su:14,tr:-8});S.flags.fact_barred=S.day;txt=N+'冷笑：「欺君！」你的話被當場識破，往後在朝堂上將處處受制。';}}
+   else if(ok){rel({su:-8,re:8,tr:5});fx.st.rep=3;fx.st.inf=2;if(f.st==='true')f.ack=Math.max(f.ack,0.5);txt=N+'沉吟良久：「好。寡人記下了。」你的身世獲得了最高一級的默許。';Facts.log(N+'默許了你的身世','chain',f.i);if(royal(f.lab)||(f.obj&&NPC[f.obj]&&NPC[f.obj].tier>=4))S.flags.route_heir=S.flags.route_heir||S.day;}
+   else{rel({su:10,fe:3});S.p.wanted=clamp(S.p.wanted+4,0,100);if(SET.diff==='hell'||SET.diff==='hard')S.flags.fact_barred=S.day;txt=N+'神色莫測：「此事，寡人還要查。」你被命令留在咸陽，不得擅離。';}}
+  else if(op==='t_probe'){var b=f.kn[K];txt=b===undefined?N+'神色如常，似乎並不知道什麼。':(b>=70?N+'沉默了一下，淡淡道：「你想說什麼，我心裡有數。」（他確知此事）':N+'眼神閃了閃：「聽過一些閒話，不過不足為信。」（他只是聽說）');if(b!==undefined){f.obs[K]=1;Facts.log('試探得知：'+N+(b>=70?'確知':'聽說過')+'此事','learn',f.i);}}
+   else if(op==='t_tell'){
+   var tp=45+R(K).tr/3+(f.st==='true'?18:-6)+(f.ev?14:0)+diffMod()/2;ok=rollD(tp);
+   var bel=ok?88:44;f.pk=1;f.obs[K]=1;Facts.learn(K,f,'p',bel);txt=Facts.reactLine(K,f)||(N+'聽完，不置可否。');txt+=ok?'':'\n（他並不完全相信你。）';}
+  else if(op==='t_proof'){var it3=hasProofFor(f.obj||K);if(it3||f.ev>0){f.ev++;Facts.learn(K,f,'p',96);f.obs[K]=1;if(K===f.obj)prove(f);txt=N+'細看憑據，神色漸變。'+(Facts.reactLine(K,f)||'');}else txt='你拿不出任何憑據。';}
+  else if(op==='t_hush'){var hp=40+R(K).tr/2.5+R(K).af/4+diffMod()/2;ok=rollD(hp);
+   if(ok){F().hush[K]=S.day+120;rel({tr:2});txt=N+'點點頭：「放心，我不會多嘴。」（約四個月內他不會主動傳播）';}else{rel({su:4});txt=N+'敷衍地應了一聲，你並沒有把握他是否會守口。';}}
+  else if(op==='t_threat'){var tpp=36+pStat('wu')*0.3+pStat('stealth')*0.2-(n.tier*5)+diffMod();ok=rollD(tpp);
+   if(ok){F().hush[K]=S.day+150;rel({fe:12,su:6,af:-6});txt=N+'臉色發白：「……我明白了。」';}else{rel({ha:8,su:8});txt=N+'怒道：「你敢威脅我？」';}}
+  else txt='……';
+  var ap2=fx?applyFx(fx):[];
+  return done(title,txt+fxLine(ap2),K,[]);
+ };
+ function pickOther(f,K){var c=[];for(var i=0;i<NPCS.length;i++){var x=NPCS[i].id;if(x!==K&&alive(x)&&!NPCS[i].child&&f.kn[x]===undefined&&NPCS[i].tier>=2)c.push(x);}return c.length?c[rnd(c.length)]:'lbw';}
+ /* 談話選單 */
+ NODES.factTalk=function(a){
+  var id=a.id,n=NPC[id],L=F().list.filter(function(f){return f.st!=='refuted'&&(f.pk||f.kn[id]!==undefined);});
+  var cs=[];
+  L.forEach(function(f){var short=f.t.length>16?f.t.slice(0,16)+'…':f.t;var knows=f.kn[id]!==undefined;
+   cs.push(ch('🔍 試探他知不知道「'+short+'」','factDo',{op:'t_probe',f:f.i,k:id},null,{g:'身世'}));
+   if(!knows&&f.sub==='p')cs.push(ch('📣 向他說出「'+short+'」','factDo',{op:'t_tell',f:f.i,k:id},null,{g:'身世'}));
+   if(f.sub==='p'&&(f.ev>0||hasProofFor(f.obj||id)))cs.push(ch('📜 向他出示憑據（'+short+'）','factDo',{op:'t_proof',f:f.i,k:id},null,{g:'身世'}));
+   if(knows&&f.sub==='p'){cs.push(ch('🤐 請他保守秘密','factDo',{op:'t_hush',f:f.i,k:id},null,{g:'身世'}));cs.push(ch('😠 威嚇他閉嘴','factDo',{op:'t_threat',f:f.i,k:id},null,{g:'身世'}));}
+  });
+  cs=cs.slice(0,10);cs.push(ch('↩ 返回','talkMenu',{id:id,pass:1}));
+  return scene('【身世・秘辛】\n你與'+n.n+'私下談起那件事。',id,{bg:S.p.spot,kind:'talk',ch:cs});
+ };
+ /* ---------- 朝政鉤子 ---------- */
+ Court.hooks.fq_probe=function(a){var f=get(a.f);if(!f)return;var ids=Object.keys(f.kn);F().pend.push({to:pickOther(f,''),from:S.emp||'',f:f.i,due:S.day+3,b:60});Facts.log('朝廷下令徹查此事，風聲更緊。','chain',f.i);f.vis=Math.max(f.vis,1);};
+ Court.hooks.fq_summon=function(a){var f=get(a.f);if(!f)return;if(S.emp&&alive(S.emp))qpush(3,'fact',{s:'summon',f:f.i,k:S.emp});};
+ Court.hooks.fq_hush=function(a){var f=get(a.f);if(!f)return;if(S.emp)F().hush[S.emp]=S.day+100;};
+ Court.hooks.fq_public=function(a){var f=get(a.f);if(f)Facts.goPublic(f);};
+ /* ---------- 結局與成就 ---------- */
+ ENDINGS.fact_known={n:'身世大白',t:'那個長久被壓在心底的名字，終於被光明正大地念了出來。\n朝野震動，議論數月不息。有人為你不平，有人等著看笑話，也有人悄悄換了稱呼。\n你終於不必再活在別人的謊言與你自己的沉默裡——你是誰，天下皆知。\n（你可以繼續遊玩，這只是一個階段的終點。）'};
+ ENDINGS.fact_heir={n:'潛龍歸位',t:'血脈、官階、權勢與名分，四樣東西終於齊備。\n沒有誰再能否認你屬於那一個位置。你緩緩走上高階，看見無數人垂下頭來。\n史官提筆，在竹簡上寫下一行：「某年，某人之子，歸其位。」\n（你可以繼續遊玩。）'};
+ ENDINGS.fact_silenced={n:'被滅口',t:'有些秘密，知道的人越多，活著的人就越少。\n那一夜之後，再沒有人提起你的名字——人們只是互相交換一個眼神，然後把話題轉開。\n你的身世，成了某個宮牆深處永遠不會被翻開的卷宗。'};
+ ENDING_FATAL.fact_silenced=1;
+ ACH.push({id:'fact1',n:'驚天秘辛',d:'讓一樁身世或秘密成為世間事實',c:function(){return !!(S.x&&S.x.facts&&S.x.facts.list.some(function(f){return f.st==='true';}));}});
+ ACH.push({id:'fact_ack',n:'認祖歸宗',d:'讓血親承認你的身世',c:function(){return !!(S.x&&S.x.facts&&S.x.facts.list.some(function(f){return f.ack>=1;}));}});
+ ACH.push({id:'fact_pub',n:'天下皆知',d:'讓一樁秘辛傳遍天下',c:function(){return !!(S.x&&S.x.facts&&S.x.facts.list.some(function(f){return f.pub;}));}});
+ /* 朝政：被限制 */
+ if(Court.level){var _cl=Court.level;Court.level=function(){var l=_cl();try{if(S&&S.flags&&S.flags.fact_barred&&l>=3)l=2;}catch(e){}return l;};}
+ /* NPC 目標被秘辛改變 */
+ if(window.World&&World.needs){var _wn=World.needs;World.needs=function(id){var nd=_wn(id);try{var g=S.x&&S.x.facts&&S.x.facts.goal[id];if(g&&g.until>S.day&&nd[g.g]!==undefined)nd[g.g]+=60;}catch(e){}return nd;};}
+ /* 加入「秘密」分頁 */
+ PTABS.splice(Math.max(1,PTABS.length-3),0,['secret','🗝 秘密']);NEEDS.push('secret');
+ /* ---------- 面板 ---------- */
+ PANELS.secret=function(){
+  var fa=F(),L=fa.list.filter(function(f){return f.st!=='refuted';});
+  var hi=L.reduce(function(m,f){return Math.max(m,f.risk||0);},0);
+  var h='<div class="deskhead"><div class="st"><b>'+L.length+'</b><span>已知秘辛</span></div><div class="st"><b>'+L.filter(function(f){return f.st==='true';}).length+'</b><span>屬實</span></div><div class="st'+(hi>=4?' low':'')+'"><b>'+(hi>=7?'極高':hi>=4?'高':hi>=2?'中':'低')+'</b><span>暴露風險</span></div><div class="st"><b>'+L.filter(function(f){return f.ack>=1;}).length+'</b><span>獲承認</span></div></div>';
+  if(S.p.blood){h+='<div class="sec"><h4>出身</h4><div>'+esc(S.p.name)+'　'+(S.p.blood.p?esc(nmx(S.p.blood.p)):'？')+(S.p.blood.lab?'與'+esc(S.p.blood.lab):'')+'之'+(S.p.blood.legit?'':'私生')+(S.p.gender==='f'?'女':'子')+'</div><div class="hint">'+(S.flags.route_heir?'「奪嫡」路線已解鎖。':'')+(S.flags.fact_barred?'你因欺瞞被朝堂忌憚，官途受限。':'')+'</div></div>';}
+  if(!L.length)h+='<div class="sec"><div class="hint">尚無任何秘辛。<br>在自由輸入框寫下你想發生的事，例如：<br>「呂不韋發現我是他和一位公主的私生子」<br>「趙姬發現了我殺過人的秘密」<br>系統會依可信度登記為世間事實，並讓知情者按性格與關係作出反應。</div></div>';
+  L.slice().reverse().forEach(function(f){
+   var kn=[];for(var K in f.kn){if(!alive(K))continue;var obs=f.obs&&f.obs[K];var b=f.kn[K];var st=Facts.stanceLabel(Facts.stance(K,f));
+    kn.push('<span class="chip2" style="'+(obs?'':'opacity:.55')+'">'+(obs?esc(nmx(K)):'？？')+'<b>'+(obs?(b>=70?'確知':b>=40?'聽說':'疑')+'・'+st:'未明')+'</b></span>');}
+   var ps=f.sub==='p'?(f.kin==='parent'?'身世':(f.type==='status'?'處境':'秘密')):'他人秘辛';
+   h+='<div class="qcard'+(f.st==='true'?'':' fail')+'"><span class="due">'+({0:'秘密',1:'傳聞',2:'公開'})[f.vis]+'・風險'+Facts.riskLabel(f)+'</span><b>'+esc(ps)+'</b>'
+    +'<div style="font-size:14px;line-height:1.55;margin:4px 0">'+esc(f.t)+'</div>'
+    +'<div class="hint">'+(f.st==='true'?'✔ 屬實':'⚠ 未證實（缺憑據）')+(f.ack>=1?'　✔ 已獲親人承認':'')+'　憑據 '+(f.ev||0)+'　'+esc(dateStr(f.d))+'錄入</div>'
+    +'<div class="chips" style="margin-top:6px">'+(kn.join('')||'<span class="hint">目前只有你知道</span>')+'</div>'
+    +'<div class="acts" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">'
+    +(f.vis<2?'<button type="button" class="gobtn sm dark" data-act="factleak" data-f="'+f.i+'">放出風聲</button>':'')
+    +(f.vis>0&&f.vis<2&&f.st==='true'?'<button type="button" class="gobtn sm dark" data-act="factpub" data-f="'+f.i+'">昭告天下</button>':'')
+    +(f.st!=='true'?'<button type="button" class="gobtn sm" data-act="factsearch" data-f="'+f.i+'">尋找憑據</button>':'')
+    +(f.vis>=1?'<button type="button" class="gobtn sm dark" data-act="factsilence" data-f="'+f.i+'">花錢壓下傳聞（-120金）</button>':'')
+    +'</div></div>';});
+  var lg=fa.log.filter(function(x){return x.o;}).slice(-12).reverse();var hid=fa.log.filter(function(x){return !x.o;}).length;
+  h+='<div class="hint" style="margin:12px 2px 6px;letter-spacing:2px;color:var(--gold)">後果記錄</div>';
+  if(!lg.length)h+='<div class="sec"><div class="hint">（尚無）</div></div>';
+  lg.forEach(function(x){h+='<div class="mem"><span style="color:var(--jade)">'+esc(dateStr(x.d))+'</span>　'+esc(x.t)+'</div>';});
+  if(hid)h+='<div class="hint">另有 '+hid+' 條你尚未察覺的動靜（耳目越強，看得越清）。</div>';
+  return h;
+ };
+ PACT.factleak=function(el){var f=get(+el.getAttribute('data-f'));if(!f)return;f.vis=Math.max(1,f.vis);f.hist.push({d:S.day,t:'玩家放出風聲'});Facts.log('你暗中放出風聲：'+f.t,'chain',f.i);
+  var kn=Object.keys(f.kn).filter(alive);if(kn.length)F().pend.push({to:pickOther(f,kn[0]),from:kn[0],f:f.i,due:S.day+1,b:65});toast('已放出風聲，消息將逐漸擴散');openPanel('secret');};
+ PACT.factpub=function(el){var f=get(+el.getAttribute('data-f'));if(!f)return;Facts.goPublic(f);openPanel('secret');};
+ PACT.factsilence=function(el){var f=get(+el.getAttribute('data-f'));if(!f)return;if(S.p.st.gold<120){toast('金錢不足（需120金）');return;}S.p.st.gold-=120;
+  if(roll(55+diffMod()/2)){f.vis=Math.max(0,f.vis-1);for(var K in f.kn)F().hush[K]=S.day+45;Facts.log('你花錢壓下了風聲。','chain',f.i);toast('風聲暫時壓下去了');}else{Facts.log('壓下傳聞的嘗試徒勞無功。','chain',f.i);toast('錢花了，風聲卻沒壓住');}openPanel('secret');};
+ PACT.factsearch=function(el){var f=get(+el.getAttribute('data-f'));if(!f)return;if(!INV.canAct()){toast('此刻要先處理眼前的事');return;}closeModal();choose({go:'factSearch',a:{f:f.i}});};
+ NODES.factSearch=function(a){
+  var f=get(a.f);if(!f)return done('','無從查起。');
+  var p=26+pStat('zhi')*0.4+pStat('stealth')*0.15+diffMod();var ok=rollD(p);var fx={days:2};var txt;
+  if(ok){var ab=f.obj||f.sub;
+   if(f.obj&&roll(60)){INV.add('keepsake',{meta:{of:f.obj},own:'p',how:'尋得',who:'p',force:1});txt='你翻出了舊物——一件'+nmx(f.obj)+'的貼身信物，與你的身世對得上。';}
+   else{INV.makeEvidence(ab,String(f.t).slice(0,14),2,'查訪所得');txt='你循著蛛絲馬跡，找到了能佐證此事的物證與口供。';}
+   f.ev++;f.hist.push({d:S.day,t:'尋得憑據'});Facts.log('你尋得了新的憑據。','prove',f.i);}
+  else txt='你四處打探了兩天，一無所獲。（智謀與隱秘越高越容易；也可向當事人索取。）';
+  return done('尋找憑據',txt+fxLine(applyFx(fx)),'');
+ };
+ /* 休息／入夜時由 AI 場景完成後的提示補充 */
 })();
 
 /* ---- 99_boot.js ---- */
