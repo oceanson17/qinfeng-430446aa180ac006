@@ -892,10 +892,10 @@ function emperor(){return S.emp;}
 function defineMinors(){for(var i=0;i<NPCS.length;i++){(function(n){try{Object.defineProperty(n,"child",{get:function(){return !!(window.S&&S.day!==undefined&&effAge(n.id)<18);},set:function(v){},configurable:true});}catch(e){}})(NPCS[i]);}}
 defineMinors();
 function pStat(k){var v=(S.p.st[k]||0);if(window.eqBonus)v+=eqBonus(k);return v;}
-function pgOf(){return (S&&S.p&&S.p.pg)||(S&&S.p?S.p.gender:'m');}
+function pgOf(){if(!S||!S.p)return 'm';var p=S.p;if(p.disg&&!(S.flags&&S.flags.disg_exposed))return p.pg||(p.gender==='f'?'m':'f');return p.gender||'m';}
 function isEunuch(){return !!S.flags.eunuch;}
 function pName(){return S.p.name;}
-function honor(){return S.p.gender==='f'?'姑娘':'閣下';}
+function honor(id){var g=window.Gender?Gender.viewFor(id):pgOf();return g==='f'?'姑娘':'閣下';}
 function pSexLabel(){return S.p.gender==='f'?'女':'男';}
 
 /* ---- 初始化 ---- */
@@ -2769,8 +2769,8 @@ AI.worldRules=function(short){
  t+=(o.tl==='free'?'時間線：自由模式——人物不衰老、不自然死亡，歷史大事不會自動發生，世界只因玩家與人物的行動而變。':'時間線：按史實——歷史大事依年份發生，須貼近史實並可因玩家而小幅偏離。');
  t+=(o.page===0?'玩家年齡不增長。':'');
  if(S.goal&&GOALS[S.goal])t+='玩家志向：'+GOALS[S.goal].n+'。';
- if(S.p&&S.p.disg)t+='玩家正「'+(S.p.gender==='f'?'女扮男裝':'男扮女裝')+'」，旁人視其為'+(S.p.pg==='m'?'男':'女')+'子；'+(S.flags.disg_exposed?'身分已被識破。':'身分尚未被識破。');
- if(S.p&&S.p.origin==='custom'&&S.p.bg)t+='玩家自訂背景：「'+String(S.p.bg).slice(0,80)+'」。';
+ if(S.p&&(S.p.disg||S.flags.disg_exposed))t+=(window.Gender?Gender.aiRule():'');
+ if(S.p&&S.p.origin==='custom'&&S.p.bg)t+='玩家自訂背景：「'+String(S.p.bg).slice(0,400)+'」。';
  if(o.adult){t+='【成人模式已開啟（18+）】允許成人向的權力不對等、誘惑、私通、被權貴脅迫等情節，但一律含蓄、暗示、淡出（只寫氣氛、暗示與事後影響），絕不描寫性行為或露骨細節、不寫血腥細節；所有角色皆為成年人（未滿18歲者不得涉及任何情愛或性相關情節）；強迫情節須著重受害者視角與後果，並給出忍耐／反抗／逃離／求助／復仇／利用等多種選項。';}
  else t+='成人模式關閉：不得出現任何性或情色暗示；權勢脅迫改以非性方式呈現（威逼、構陷、軟禁、貶謫等）。';
  return t;
@@ -3953,14 +3953,14 @@ function applyLook(){
 }
 /* ---- 玩家外觀 ---- */
 function playerLook(){
- var p=S.p,hh=hashStr(p.name||'x'),f=p.gender==='f',path=p.path;
+ var p=S.p,hh=hashStr(p.name||'x'),f=pgOf()==='f',path=p.path;
  var rbm={guard:'#b8322a',eunuch:'#4a4a58',soldier:'#7a3a2a',adviser:'#e8e2d0',physician:'#3f7a4a',maid:'#d98a9a',consort:'#c24a6a',attendant:'#6b3f7a',wander:'#6a5a3a'};
  var hs={guard:'kui',eunuch:'eun',soldier:'fu',adviser:'guan',physician:'jin',maid:'bun',consort:'bun',attendant:'bun',wander:'jin'}[path]||'fu';
  if(f&&['kui','eun','fu','guan','jin'].indexOf(hs)>=0)hs=(path==='guard'||path==='soldier')?'bun':'long';
  var fc=(FACTIONS[p.fac]&&FACTIONS[p.fac].c)||'#d9a93a';
  return {h:hs,b:(f||path==='eunuch')?0:(hh%3===0?1:0),rb:rbm[path]||'#2f4a7a',tr:fc,sk:hh%2,pin:1};
 }
-function drawPlayerBadge(cv,big){if(!S)return;Art.portrait(cv,playerLook(),S.p.gender,'#4a5a7a');}
+function drawPlayerBadge(cv,big){if(!S)return;Art.portrait(cv,playerLook(),pgOf(),'#4a5a7a');}
 function drawNpcPortrait(cv,id){var n=NPC[id];if(!n)return;var fc=(FACTIONS[n.f]&&FACTIONS[n.f].c)||'#556';Art.portrait(cv,n.look,n.sex,mix(fc,'#444444',0.35));}
 function drawPlaceholders(root){
  var list=root.querySelectorAll('canvas[data-npc]');
@@ -3985,7 +3985,7 @@ function drawStage(sc){
   var sp=sc.sp&&NPC[sc.sp]?NPC[sc.sp]:null;
   big=!!sp;
   var pf=(FACTIONS[S.p.fac]&&FACTIONS[S.p.fac].c)||'#d9a93a';
-  figs.push({x:big?0.27:0.36,look:playerLook(),sex:S.p.gender,me:true,fac:pf});
+  figs.push({x:big?0.27:0.36,look:playerLook(),sex:pgOf(),me:true,fac:pf});
   if(sp)figs.push({x:0.72,look:sp.look,sex:sp.sex,id:sc.sp,fac:facColorOf(sc.sp),sword:sp.wu>=70&&sp.tier<=3});
   else if(sc.kind==='hub'||sc.kind==='menu'){
    var here=hereNpcs().filter(function(id){return spotOf(id)===S.p.spot&&!NPC[id].child;}).slice(0,2);
@@ -4215,7 +4215,7 @@ function runAsync(sc){
   return present(m0,{nopolish:true,offer:(a.type==='polish'?{a:{type:'polish',scene:m0},due:true}:{a:a,due:true})});
  }
  /* AI 不可用（已暫停／永久錯誤／冷卻中／沒 Key）：直接走離線，不呼叫 API */
- if(!AI.ready()){return present(fbScene(),{nopolish:true});}
+ if(!AI.ready()){if(window.Thread&&Thread.unavail(a))return present(Thread.pausedScene(),{nopolish:true});return present(fbScene(),{nopolish:true});}
  var p;
  /* 潤色：先立刻顯示完整離線劇情與選項，AI 回來後才替換（玩家已離開就略過） */
  if(a.type==='polish'){
@@ -4260,6 +4260,7 @@ function runAsync(sc){
   try{AI.fail(e);}catch(e2){}
   if(tok!==UIs.token)return;
   UIs.token++;
+  if(window.Thread&&Thread.paused(a)){try{barHide('err');present(Thread.pausedScene(),{nopolish:true});return;}catch(e5){if(window.console)console.error('thread pause',e5);}}
   try{fallback();}catch(e3){if(window.console)console.error('fallback',e3);try{present(NODES.hub({}),{nopolish:true});}catch(e4){}}
  });
 }
@@ -4328,7 +4329,7 @@ var NAMES_M=['嬴起','趙衡','楚蒼','魏牧','韓朔','燕離','李徹','蒙
 var NAMES_F=['青禾','蘇晚','楚歌','趙蓁','燕月','白棠','虞薇','蘭汀','越茵','芷若','夏簌','子衿'];
 function newCfg(){return {name:'',gender:'m',disguise:0,age:20,origin:'lang',fac:'qin',start:'q247',trait:'sage',goal:'',tl:'hist',page:1,adult:SET.adult&&SET.adultOK?1:0,bg:'',alloc:{wu:0,zhi:0,zheng:0,mei:0,tong:0,stealth:0},pts:12};}
 /* 自訂背景：離線關鍵字對應 */
-function customMap(t){
+function customMapLegacy(t){
  var r={path:'wander',fac:'none',reg:'xianyang',mod:{},gold:60,flags:{},goal:''};t=t||'';
  var has=function(re){return re.test(t);};
  if(has(/兵|軍|戰|將|卒|戍|伍/)){r.path='soldier';r.fac='qin';r.mod.wu=8;r.mod.tong=4;r.reg='hangu';}
@@ -4345,16 +4346,20 @@ function customMap(t){
  if(has(/仇|恨|滅門|血債|報復/)){r.goal='revenge';}
  return r;
 }
+function customMap(t){return window.Origin?Origin.map(t):customMapLegacy(t);}
 function startGame(cfg){
  var org=ORIGINS[cfg.origin];
- if(cfg.origin==='custom'){var cm=customMap(cfg.bg);org.path=cm.path;org.fac=cm.fac;org.reg=cm.reg;org.mod=cm.mod;org.gold=cm.gold;org.goal=cm.goal;org.cflags=cm.flags;}
- var c={name:(cfg.name||'').replace(/^\s+|\s+$/g,'').slice(0,8)||(cfg.gender==='f'?'無名女子':'無名氏'),gender:cfg.gender,disguise:cfg.disguise?1:0,age:cfg.age,origin:cfg.origin,fac:org.fac==='*'?cfg.fac:org.fac,start:cfg.start,trait:cfg.trait,alloc:cfg.alloc,goal:cfg.goal,tl:cfg.tl,page:cfg.page,bg:(cfg.bg||'').slice(0,120),seed:cfg.seed||Math.floor(Math.random()*2147483647)};
+ var cm=null;
+ if(cfg.origin==='custom'){cfg.bg=String(cfg.bg||'').slice(0,400);cm=customMap(cfg.bg);org.path=cm.path;org.fac=cm.fac;org.reg=cm.reg;org.mod=cm.mod;org.gold=cm.gold;org.goal=cm.goal;org.cflags=cm.flags;
+  if(cm.prof&&cm.prof.age&&cm.prof.rich){cfg.age=cm.prof.age;}}
+ var c={name:(cfg.name||'').replace(/^\s+|\s+$/g,'').slice(0,8)||(cfg.gender==='f'?'無名女子':'無名氏'),gender:cfg.gender,disguise:cfg.disguise?1:0,age:cfg.age,origin:cfg.origin,fac:org.fac==='*'?cfg.fac:org.fac,start:cfg.start,trait:cfg.trait,alloc:cfg.alloc,goal:cfg.goal,tl:cfg.tl,page:cfg.page,bg:(cfg.bg||'').slice(0,400),seed:cfg.seed||Math.floor(Math.random()*2147483647)};
  S=newState(c);
  S.opt.adult=(cfg.adult&&SET.adult&&SET.adultOK)?1:0;
  if(org.cflags){for(var fk in org.cflags)S.flags[fk]=1;}
+ if(cfg.origin==='custom'&&window.Origin){try{Origin.apply(cfg.bg,cm);if(cm&&cm.goal&&!S.goal)S.goal=cm.goal;}catch(oe){if(window.console)console.error('Origin.apply',oe);}}
  closeModal();
  var o=ORIGINS[S.p.origin];var so=null;for(var i=0;i<START_OPTS.length;i++)if(START_OPTS[i].id===c.start)so=START_OPTS[i];
- var t='【'+dateFull()+'】\n'+(so?so.n:'')+'\n\n你叫'+S.p.name+'，'+(S.p.gender==='f'?'一名女子':'一個男子')+(S.p.disg?'（正扮作'+(S.p.pg==='m'?'男子':'女子')+'行走）':'')+'，年方'+S.p.age+'。\n'+(S.p.origin==='custom'&&S.p.bg?'「'+S.p.bg+'」\n':o.desc)+'\n\n史書上沒有你的名字——但在大秦崛起的年代，一句話、一封信、一把刀，都可能改寫一個人的命運，甚至天下。\n\n你的志向：'+(S.goal&&GOALS[S.goal]?GOALS[S.goal].n:'尚未決定（隨時可在「行動→志向」更改）')+'。\n\n（提示：下方選項推進劇情，也可在輸入框自由輸入行動，如「拜訪 呂不韋」「打聽 太后」「刺殺 嫪毐」。頂部按鈕可查看角色、人物關係、日誌、天下形勢、存檔與設定。）';
+ var t='【'+dateFull()+'】\n'+(so?so.n:'')+'\n\n你叫'+S.p.name+'，'+(S.p.gender==='f'?'一名女子':'一個男子')+(S.p.disg?'（正扮作'+(S.p.pg==='m'?'男子':'女子')+'行走）':'')+'，年方'+S.p.age+'。\n'+(S.p.origin==='custom'&&S.p.bg?'「'+S.p.bg+'」\n':o.desc)+(S.p.origin==='custom'&&window.Origin&&Origin.openText?'\n'+Origin.openText():'')+'\n\n史書上沒有你的名字——但在大秦崛起的年代，一句話、一封信、一把刀，都可能改寫一個人的命運，甚至天下。\n\n你的志向：'+(S.goal&&GOALS[S.goal]?GOALS[S.goal].n:'尚未決定（隨時可在「行動→志向」更改）')+'。\n\n（提示：下方選項推進劇情，也可在輸入框自由輸入行動，如「拜訪 呂不韋」「打聽 太后」「刺殺 嫪毐」。頂部按鈕可查看角色、人物關係、日誌、天下形勢、存檔與設定。）';
  UIs.noAuto=true;present(scene(t,'',{bg:S.p.spot,kind:'menu',ch:[ch('踏入秦風','hub'),ch('📖 新手指引','tut',{k:0})]}),{nopolish:true});UIs.noAuto=false;
 }
 /* ---- 自由輸入 ---- */
@@ -4418,7 +4423,8 @@ function wizardRender(){
  for(var ci=0;ci<ORIGIN_CATS.length;ci++){var cat=ORIGIN_CATS[ci],row='';for(var i=0;i<ao.length;i++){if(ORIGINS[ao[i]].cat===cat)row+=opt('o',ao[i],ORIGINS[ao[i]].n,c.origin===ao[i]);}
   if(row)h+='<div class="hint" style="margin:4px 0 2px">'+cat+'</div><div>'+row+'</div>';}
  h+='<div class="hint" style="margin-top:6px">'+esc(o.desc)+(c.origin==='eunuch'?'<br><span class="fwarn">⚠ 此路線需自請淨身，無法逆轉。</span>':'')+'</div>';
- if(c.origin==='custom')h+='<textarea class="field" id="wbg" maxlength="120" rows="3" placeholder="寫下你的來歷（例：趙國將門之後，擅劍，家破人亡）" style="width:100%;margin-top:6px">'+esc(c.bg)+'</textarea><div class="hint">離線也能用：依關鍵字（兵、書、醫、商、劍、盜、趙韓魏楚齊燕、仇……）決定專長與起點；若開啟 AI，會參考你的文字展開劇情。</div>';
+ if(c.origin==='custom'){var bgp='';try{bgp=window.Origin?Origin.preview(c.bg):'';}catch(e){}
+  h+='<textarea class="field" id="wbg" maxlength="400" rows="6" placeholder="寫下你的來歷，最多400字。可以很詳細：生父母是誰、發生過什麼事、誰是仇人、身上有什麼病或毒、你要做什麼……（例：趙國將門之後，擅劍，家破人亡，要找仇人報仇）" style="width:100%;margin-top:6px">'+esc(c.bg)+'</textarea><div class="hint">離線也能完整遊玩：遊戲會解析你的文字——生父母、關鍵事件、仇人、秘密、中毒／病／蠱、使命、專長——決定路線、屬性、起始關係、任務與毒發解藥機制，並把秘密登記成只有你知道的秘辛。若開啟 AI，完整原文也會附在每次提示中。解析不到的細節仍會保留給 AI。</div><div class="row" style="margin-top:4px"><button class="gobtn sm dark" data-act="obprev">🔍 解析預覽</button></div><div class="hint" id="wbgprev">'+esc(bgp)+'</div>';}
  if(o.fac==='*'){h+='<div style="margin-top:6px" class="hint">選擇投靠的勢力：</div><div>';for(i=0;i<CHOOSE_FAC.length;i++)h+=opt('f',CHOOSE_FAC[i],FACTIONS[CHOOSE_FAC[i]].n.replace(/·.*/,''),c.fac===CHOOSE_FAC[i]);h+='</div>';}
  else if(c.origin!=='custom')h+='<div class="hint" style="margin-top:6px">所屬：'+(o.fac==='none'?'無（自由身）':FACTIONS[o.fac].n)+'</div>';
  h+='</div><div class="sec"><h4>③ 志向（隨時可改）</h4><div>'+opt('gl','',  '順其自然',!c.goal);
@@ -4511,6 +4517,7 @@ function panelAct(act,el){
   if(act==='ap'&&c.pts>0&&c.alloc[k]<10){c.alloc[k]++;c.pts--;}
   if(act==='am'&&c.alloc[k]>0){c.alloc[k]--;c.pts++;}
   wizardRender();}
+ else if(act==='obprev'){wizardKeepName();var pv=$('wbgprev');if(pv)pv.textContent=window.Origin?Origin.preview(UIs.cfg.bg):'';}
  else if(act==='begin'){wizardKeepName();startGame(UIs.cfg);}
  else if(PACT[act])PACT[act](el);
 }
@@ -4532,7 +4539,7 @@ function manualDialog(o){
   +'<div style="margin-top:6px"><button class="gobtn sm dark" data-xact="paste">📥 貼上剪貼簿</button> <button class="gobtn sm" data-xact="apply">✅ 套用</button> <button class="gobtn sm dark" data-xact="offline">✖ 關閉（保留離線劇情）</button></div>'
   +'<div class="fwarn" id="xmsg" style="margin-top:6px"></div></div>'
   +'<div class="hint">提示：Grok 回覆太長被截斷時，可在 Grok 輸入「請只輸出完整JSON」再複製。若一直失敗，按「關閉」即可，畫面上本來就有離線劇情可繼續。</div>';
- $('xbody').innerHTML=h;$('xprompt').value=o.prompt;$('xinfo').textContent='提示共 '+o.prompt.length+' 字（已精簡，適合手機貼上）。';
+ $('xbody').innerHTML=h;$('xprompt').value=o.prompt;$('xinfo').textContent='提示共 '+o.prompt.length+' 字（已精簡，適合手機貼上）。'+(window.Origin&&Origin.manualNote?Origin.manualNote():'');
  $('ovx').className='ov on';$('xbody').scrollTop=0;
 }
 function manualAct(act){
@@ -5270,7 +5277,7 @@ NODES.clothGossip=function(){
  return PL('閨閣消息',t,fx);
 };
 NODES.clothWork=function(){
- timePass(4);var g=24+rnd(26)+Math.floor(pStat('mei')/6)+(S.p.gender==='f'?8:0);
+ timePass(4);var g=24+rnd(26)+Math.floor(pStat('mei')/6)+(pgOf()==='f'?8:0);
  return PL('針線營生','你坐在後堂縫了半日衣裳，布庄店主給了你工錢。針腳勻稱，她還誇你手巧。',{st:{gold:g,mei:roll(20)?1:0}});
 };
 /* ---- 市集 ---- */
@@ -5914,9 +5921,9 @@ function dtList(key,val){
 function dtTxt(s,tp){
  if(typeof s==='function'){try{s=s();}catch(e){s='';}}
  s=String(s||'');
- var N=tp&&tp.npc?nm(tp.npc):'';
- return s.replace(/\{P\}/g,S.p.name).replace(/\{N\}/g,N).replace(/\{T\}/g,honor()).replace(/\{R\}/g,regionName(S.p.region).split('·')[0])
-  .replace(/\{B\}/g,(bossOf()?nm(bossOf()):'主公')).replace(/\{G\}/g,S.p.gender==='f'?'姑娘':'公子').replace(/\{M\}/g,S.p.gender==='f'?'她':'他');
+ var N=tp&&tp.npc?nm(tp.npc):'';var GV=window.Gender?Gender.viewFor(tp&&tp.npc):pgOf();
+ return s.replace(/\{P\}/g,S.p.name).replace(/\{N\}/g,N).replace(/\{T\}/g,honor(tp&&tp.npc)).replace(/\{R\}/g,regionName(S.p.region).split('·')[0])
+  .replace(/\{B\}/g,(bossOf()?nm(bossOf()):'主公')).replace(/\{G\}/g,GV==='f'?'姑娘':'公子').replace(/\{M\}/g,GV==='f'?'她':'他');
 }
 function dtOptLabel(o,tp){
  var t=dtTxt(o.t,tp);
@@ -9491,9 +9498,9 @@ function punFree(txt,acc,rel,lv){
 }
 function punVerdict(a){
  var kind=a.kind,acc=a.acc,partner=a.partner,lvl=a.lvl,pre=a.pre||'';
- if(lvl===4){var okC=false;if(S.p.gender==='m'&&!isEunuch()&&(kind==='adultery'||(S.p.spot==='palace'&&(kind==='leak'||kind==='deceive'))))okC=true;else if(S.p.gender==='f'&&!inCamp()&&(kind==='adultery'||kind==='treason'||kind==='conspire'))okC=true;if(!okC)lvl=(kind==='assassin'||kind==='treason')?5:3;}
+ if(lvl===4){var okC=false;if(pgOf()==='m'&&!isEunuch()&&(kind==='adultery'||(S.p.spot==='palace'&&(kind==='leak'||kind==='deceive'))))okC=true;else if(pgOf()==='f'&&!inCamp()&&(kind==='adultery'||kind==='treason'||kind==='conspire'))okC=true;if(!okC)lvl=(kind==='assassin'||kind==='treason')?5:3;}
  if(lvl===4&&SET.diff==='easy')lvl=3;
- var ctx='玩家（'+(S.p.gender==='m'?'男':'女')+'，'+S.p.title+'）因【'+PUN_KIND[kind]+'】被「'+JD.profile(acc)+'」拿下'+(partner?'，涉事者：'+nm(partner):'')+'。已經歷：'+(pre||'無')+'。依規則，初步量刑為「'+PUN_LV[lvl]+'」。請裁決(可以更輕一級或維持)。';
+ var ctx='玩家（'+(pgOf()==='m'?'男':'女')+(S.p.disg&&!S.flags.disg_exposed?'，真實性別為'+(S.p.gender==='m'?'男':'女')+'但尚未被識破，官府依其外表處置':'')+'，'+S.p.title+'）因【'+PUN_KIND[kind]+'】被「'+JD.profile(acc)+'」拿下'+(partner?'，涉事者：'+nm(partner):'')+'。已經歷：'+(pre||'無')+'。依規則，初步量刑為「'+PUN_LV[lvl]+'」。請裁決(可以更輕一級或維持)。';
  return judgeScene('punish',ctx,'punDo',{kind:kind,acc:acc,partner:partner,lvl:lvl,pre:pre});
 }
 NODES.punDo=function(a){
@@ -9509,7 +9516,7 @@ NODES.punDo=function(a){
  else if(lvl===2){t+=a.ai?'':n.n+'揮了揮手：「押入大牢。」';if(window.Canon)Canon.note('曾被'+n.n+'下獄（'+dateStr()+'）');fx.st.rep=-4;}
  else if(lvl===3){t+=a.ai?'':n.n+'下令將你逐出：「流放千里，永不得返！」';fx.st.hp=-10;fx.st.rep=-6;fx.days=40;
   if(window.Canon)Canon.note('被'+n.n+'流放邊地（'+dateStr()+'）');S.p.region=pick(['beidi','bashu']);S.p.spot=pick(REGIONS[S.p.region].sub0||REGIONS[S.p.region].sub);S.p.rank=Math.max(0,S.p.rank-1);S.p.title=titleOf();}
- else if(lvl===4&&S.p.gender==='f'){return fallCamp(acc,'與'+(partner?nm(partner):'他人')+'之事');}
+ else if(lvl===4&&pgOf()==='f'){return fallCamp(acc,'與'+(partner?nm(partner):'他人')+'之事');}
  else if(lvl===4){t+=a.ai?'':n.n+'聲音冰冷：「依例，處以宮刑（腐刑）。」';t+='\n\n（此後之事不堪細述。）一個月的昏沉與痛楚過去，你被留在宮中，成為一名宦者。';
   if(window.Canon)Canon.note('因私情被處宮刑，淪為宦者（'+dateStr()+'）');S.flags.eunuch=1;S.flags.punished_eunuch=1;S.p.path='eunuch';S.p.fac='qin';S.p.rank=0;S.p.region='xianyang';S.p.spot='palace';
   fx.days=30;fx.st.hp=-Math.round(30+10*DS());fx.st.mei=-2;fx.st.wu=-3;fx.st.stealth=4;fx.st.rep=-5;eunuchLoveShift();rvOffer(acc,'eunuch','被'+n.n+'處以宮刑');S.pending.push(rvOfferScene());
@@ -10251,7 +10258,7 @@ var Canon={};
   }else L.push('☠已故：暫無。');
   /* 玩家狀態 */
   var p=S.p,st=p.st,ps=[],ps2=[];
-  ps.push(p.name+'（'+(p.gender==='f'?'女':'男')+p.age+'歲）'+(p.title||''));
+  ps.push(p.name+'（'+(p.disg&&!S.flags.disg_exposed?'真實為'+(p.gender==='f'?'女':'男')+'，旁人眼中為'+(pgOf()==='f'?'女':'男')+'，一律以旁人眼中性別稱呼':(p.gender==='f'?'女':'男'))+p.age+'歲）'+(p.title||''));
   if(S.flags.eunuch)ps.push(S.flags.punished_eunuch?'已受宮刑，現為宦者（因私情被罰）':'宦者');
   if(p.wanted>0)ps.push('通緝度'+p.wanted);
   if(st.hp<35)ps.push('重傷／病弱(健康'+st.hp+')');
@@ -15674,7 +15681,7 @@ var Facts={};
    var v=Facts.validate(o);
    if(!v.ok){res.rej.push(v.reason);res.lines.push('（無法成立：'+v.reason+'）');continue;}
    if(v.dead&&v.dead.length)res.lines.push('（'+v.dead.map(nmx).join('、')+'已不在人世，無從得知此事。）');
-   var pl=Facts.plaus(o,src);var good=pl>=70||roll(pl);
+   var pl=Facts.plaus(o,src);var good=ctx.force||pl>=70||roll(pl);if(ctx.force)pl=Math.max(pl,95);
    if(o.proof==='strong'&&!good&&roll(40))good=true;
    var d=findDup(o),f;
    var st=good?'true':'claim';
@@ -16436,6 +16443,1984 @@ var Facts={};
   }catch(err){if(window.console)console.error('scope',err);}
   return out;
  };
+})();
+
+/* ---- 62_origin.js ---- */
+/* ===== 秦風 · 自設身世解析器（Origin）：離線解析 → originProfile → 路線／屬性／旗標／目標／秘辛／AI 提示 ===== */
+var Origin={};
+(function(){
+ var MAXLEN=400;Origin.MAX=MAXLEN;
+ /* ---------- 正規化：錯別字、簡繁、常見別稱 ---------- */
+ var S2T='吕呂国國齐齊赵趙韩韓魏魏楚楚燕燕秦秦韦韋杀殺药藥医醫剑劍刺刺书書师師训訓练練变變给給个個们們说說来來时時为為将將军軍战戰兵兵别別离離开開见見长長门門东東后後发發头頭关關两兩义義乐樂亲親爱愛恋戀杀殺伤傷残殘带帶还還过過这這么麼会會问問难難龙龍无無实實观觀众眾岁歲帮幫线線误誤陷陷害害复復仇仇报報恩恩诈詐谋謀毒毒蛊蠱痴癡癫癲废廢卫衛馆館鸩鴆救救隐隱埋埋姓姓换換缘緣愿願惩懲罚罰贤賢强強壮壯猎獵鸟鳥';
+ var S2TM={};(function(){for(var i=0;i<S2T.length;i+=2){if(S2T.charAt(i)!==S2T.charAt(i+1))S2TM[S2T.charAt(i)]=S2T.charAt(i+1);}})();
+ var TYPO=[[/剌/g,'刺'],[/呂不偉|呂布偉|呂不葦|呂不緯|呂丕韋|呂不位|呂布韋|呂不围|呂不圍|呂不諱/g,'呂不韋'],[/不偉/g,'不韋'],[/贏政|赢政|嬴正|嬴徵|嬴征|嬴政/g,'嬴政'],[/嫪毒|繆毐|嫪嬡|嫪毐/g,'嫪毐'],[/趙姫|趙姬|趙姫/g,'趙姬'],
+  [/夏無沮|夏無旦|夏無且/g,'夏無且'],[/荆軻|荊珂|荊柯|荆柯/g,'荊軻'],[/華陽夫人/g,'華陽太后'],[/傻瓜|傻蛋|白痴|白癡/g,'傻子'],[/解葯|解藥/g,'解藥'],[/毒葯/g,'毒藥'],[/刺殺/g,'刺殺'],[/暗殺/g,'暗殺'],[/齊国|齊國/g,'齊國'],[/楚国/g,'楚國'],[/赵国/g,'趙國']];
+ Origin.norm=function(t){
+  t=String(t==null?'':t).replace(/\u3000/g,' ');
+  var o='';for(var i=0;i<t.length;i++){var c=t.charAt(i);o+=S2TM[c]||c;}
+  for(i=0;i<TYPO.length;i++)o=o.replace(TYPO[i][0],TYPO[i][1]);
+  return o.replace(/[\r\n\t ]+/g,' ').replace(/^\s+|\s+$/g,'');
+ };
+ /* ---------- 工具 ---------- */
+ var CN={'零':0,'〇':0,'一':1,'二':2,'兩':2,'三':3,'四':4,'五':5,'六':6,'七':7,'八':8,'九':9};
+ function cn2n(s){s=String(s||'');if(/^\d+$/.test(s))return +s;if(s==='十')return 10;
+  var m=s.match(/^([一二兩三四五六七八九])?十([一二三四五六七八九])?$/);if(m)return (m[1]?CN[m[1]]:1)*10+(m[2]?CN[m[2]]:0);
+  if(s.length===1&&CN[s]!==undefined)return CN[s];if(/^[一二兩三四五六七八九]+$/.test(s)){var n=0;for(var i=0;i<s.length;i++)n=n*10+CN[s.charAt(i)];return n;}return NaN;}
+ Origin.cn2n=cn2n;
+ var COUNTRY='韓趙魏楚齊燕秦衛宋';
+ var LABRE=new RegExp('(?:(['+COUNTRY+'])國?的?)?(公主|王姬|王后|王妃|夫人|公子|王孫|王子|王族|宗室|貴族|世家|太子|大夫|將軍|女官|宮女|舞姬|歌姬|歌伎|商人|大賈|富商|俠客|劍客|農婦|樂師|醫者|巫女|隱士|刺客|貴婦|嬪妃|侍女|將門|名將|宗親)','g');
+ var FEM='公主王姬王后王妃夫人宮女舞姬歌姬歌伎女官農婦巫女貴婦嬪妃侍女';
+ var ALIASES=[['文信侯','lbw'],['相邦','lbw'],['呂相','lbw'],['秦王政','yingzheng'],['秦王','yingzheng'],['長信侯','laoai'],['太后','zhaoji'],['華陽夫人','huayang']];
+ function npcEnts(str){
+  var found=[],i,n,p;
+  for(i=0;i<NPCS.length;i++){n=NPCS[i];if(n.hidden)continue;var nm0=n.n;
+   if(nm0.length<2)continue;
+   var re=null;p=str.indexOf(nm0);
+   while(p>=0){var nx=str.charAt(p+nm0.length);
+    if(/王$/.test(nm0)&&/[室族宮后子孫女]/.test(nx)){p=str.indexOf(nm0,p+1);continue;}
+    found.push({kind:'npc',id:n.id,name:nm0,p:p,e:p+nm0.length});break;}
+  }
+  for(i=0;i<ALIASES.length;i++){var a=ALIASES[i];p=str.indexOf(a[0]);
+   if(p>=0){if(a[0]==='太后'&&/[華夏]陽?$/.test(str.slice(Math.max(0,p-2),p)))continue;if(NPC[a[1]])found.push({kind:'npc',id:a[1],name:a[0],p:p,e:p+a[0].length});}}
+  return found;
+ }
+ function ents(str){
+  var f=npcEnts(str),m;LABRE.lastIndex=0;
+  while((m=LABRE.exec(str))){var lab=(m[1]?m[1]+'國':'')+m[2];f.push({kind:'lab',lab:lab,role:m[2],p:m.index,e:m.index+m[0].length});if(m.index===LABRE.lastIndex)LABRE.lastIndex++;}
+  /* 去除被包含者 */
+  f=f.filter(function(x){for(var i=0;i<f.length;i++){var y=f[i];if(y!==x&&y.p<=x.p&&y.e>=x.e&&(y.e-y.p>x.e-x.p||(y.e-y.p===x.e-x.p&&i<f.indexOf(x))))return false;}return true;});
+  f.sort(function(a,b){return a.p-b.p;});
+  return f;
+ }
+ Origin.ents=ents;
+ function sexOfEnt(e){if(e.kind==='npc')return NPC[e.id]?NPC[e.id].sex:'';return FEM.indexOf(e.role)>=0?'f':(/公子|王孫|王子|太子|大夫|將軍|劍客|俠客|商人|大賈|富商|名將|將門/.test(e.role)?'m':'');}
+ function entName(e){return e.kind==='npc'?NPC[e.id].n:e.lab;}
+ function clauseOf(t,pos){var s=pos,e=pos;while(s>0&&'，。；！？、,.;!?\n'.indexOf(t.charAt(s-1))<0)s--;while(e<t.length&&'，。；！？、,.;!?\n'.indexOf(t.charAt(e))<0)e++;return t.slice(s,e);}
+ /* ---------- 解析 ---------- */
+ var EVT=[
+  ['stabbed',/被[^，。；]{0,6}(?:刺殺|行刺|刺傷|暗殺|追殺|謀殺|毒害|殺害|刺)|遭[^，。；]{0,4}(?:刺殺|暗殺|追殺|毒手)|遇刺|遇襲|慘遭[^，。；]{0,3}毒手/,'遭人刺殺'],
+  ['fall',/墜崖|掉下山|摔下山|跌下山|跌落|掉下懸崖|落崖|墮崖|跳崖|墜落|墜入|掉進|落水|墜江|墜河|墜山|掉下[^，。；]{0,4}(?:山|崖|河|江|水)/,'墜崖落水'],
+  ['rescued',/被[^，。；]{0,5}救|為[^，。；]{0,4}所救|獲救|得救|大難不死|卻不死|竟不死|沒死|未死|不死|撿回一命|救起|救下/,'被人所救'],
+  ['framed',/用計|設計陷害|設局|陷害|栽贓|嫁禍|挑撥|離間|誤以為|誤會|以為是|被冤|冤枉|蒙冤|使詐/,'被陷害或誤會'],
+  ['trained',/訓練|培養|栽培|調教|養大|撫養|收養|撫育|教我|傳授|磨練|嚴加管教/,'被人訓練'],
+  ['romance',/深愛|相愛|情人|愛人|心上人|青梅竹馬|私定終身|兩情相悅/,'有一段情'],
+  ['orphan',/孤兒|父母雙亡|自幼喪父|自幼喪母|無父無母|孤苦|早逝|早亡/,'孤苦'],
+  ['destroyed',/滅門|家破人亡|被滅|滿門抄斬|全家被殺|血債|亡國|國破家亡|家道中落|滅國/,'家破人亡'],
+  ['betrayed',/背叛|出賣|被騙|欺騙|辜負|反目/,'遭人背叛'],
+  ['exile',/流亡|逃亡|逃難|出逃|流浪|漂泊|逃出|私奔/,'流亡'],
+  ['sold',/被賣|賣為|賣身|為奴|淪為|被擄/,'被賣為奴'],
+  ['amnesia',/失憶|忘記|記不起|不記得|喪失記憶|忘了/,'失憶'],
+  ['hidden',/隱姓埋名|改名換姓|假身分|化名|偽裝身分/,'隱姓埋名']
+ ];
+ var SKILLS=[
+  ['assassin',/刺客|殺手|死士|影衛|暗殺術|刺殺術|殺人的本事|殺人技/,'刺客'],['martial',/劍|俠|武|拳|刀|槍|弓箭|騎射|練武/,'武藝'],['medic',/醫|郎中|藥師|採藥|草藥|懸壺|行醫|藥理/,'醫術'],
+  ['merchant',/商|賈|財|富|錢|貨殖|買賣|生意/,'經商'],['soldier',/兵|軍|戰|將門|卒|戍|伍|沙場|行伍/,'兵事'],['scholar',/書|學|士|文|儒|法家|策|謀|史|讀|學問/,'謀學'],
+  ['servant',/宮女|侍女|婢|奴|僕|內侍|丫鬟/,'侍奉'],['entertainer',/歌|舞|伎|琴|樂|酒肆|歌姬|舞姬/,'歌舞'],['thief',/盜|賊|竊|飛賊|潛行|飛檐走壁/,'潛行'],['poisoner',/用毒|毒師|毒術|擅毒|製毒|煉毒/,'毒術']
+ ];
+ var AFFL_RE=/解藥|中毒|毒發|劇毒|被下毒|下了毒|下毒|身中|身上[^，。；]{0,8}毒|我身[^，。；]{0,8}毒|蠱|毒性|慢性毒|服毒|鴆/;
+ var FOOL_RE=/變成傻子|變傻|癡傻|傻子|癡呆|變笨|神智|失智|瘋掉|變瘋|發瘋|呆子|廢人|慢慢[^，。；]{0,4}(?:傻|瘋|癡|死)|癡癡/;
+ function periodOf(t){
+  var m,n;
+  if((m=t.match(/每(?:隔)?(半個?月|半月|十五天|十五日|15天|15日)/)))return 15;
+  if((m=t.match(/每(?:隔)?([一二兩三四五六七八九十\d]+)\s*(?:個)?(天|日|旬|週|周|月|季|年)/))){n=cn2n(m[1]);if(!isNaN(n)&&n>0){var u=m[2];var d=(u==='天'||u==='日')?n:(u==='旬'?10*n:(u==='週'||u==='周'?7*n:(u==='月'?30*n:(u==='季'?90*n:360*n))));return Math.max(7,Math.min(120,d));}}
+  if(/每(?:個)?月|一個月|月月|按月|月服|每月/.test(t))return 30;
+  if(/每旬|十天一次|十日一次/.test(t))return 10;
+  if(/每週|每周|每星期|七天一次|七日一次/.test(t))return 7;
+  if(/每季|三個月一次|每三個月/.test(t))return 90;
+  if(/每年|一年一次/.test(t))return 120;
+  if(/每(?:天|日)|每天/.test(t))return 7;
+  return 30;
+ }
+ Origin.periodOf=periodOf;
+ function parseParents(t){
+  var P=[];function add(e,role){if(!e)return;for(var i=0;i<P.length;i++){if((e.kind==='npc'&&P[i].id===e.id)||(e.kind==='lab'&&P[i].lab===e.lab))return;}
+   if(e.kind==='npc'&&NPC[e.id]&&NPC[e.id].child&&false)return;
+   P.push({id:e.kind==='npc'?e.id:'',lab:e.kind==='lab'?e.lab:'',g:sexOfEnt(e),role:role||'',name:entName(e)});}
+  var m,i,A,B,g1,g2;
+  function royalLab(e){return e.kind==='npc'||/公主|王族|王室|王孫|公子|王子|太子|國君|君主|大王|太后|王后|王妃|貴妃/.test(e.lab||'');}
+  var KIDW='(?:私生|親生|嫡|庶)?(?:之?女兒|之?兒子|之?孩子|之?骨肉|之?後人|之?後裔|之?遺孤|之?血脈|之女|之子|所生|生下|的女|的子|生的)';
+  var r1=new RegExp('([^，。；！？\\n]{2,30}?)(?:與|和|同|跟)([^，。；！？\\n]{2,16}?)(?:所生|生下|之子|之女|的(?:私生)?(?:女兒|兒子|孩子|骨肉|後人|親生)|所育)');
+  if((m=r1.exec(t))){g1=ents(m[1]);g2=ents(m[2]);A=g1.length?g1[g1.length-1]:null;B=g2.length?g2[0]:null;
+   if(A&&B){add(A);add(B);}else if(A||B){add(A||B);}}
+  var r2=/(?:我是|我乃|我為|我就是|我係)([^，。；！？\n]{2,30}?)的(?:私生|親生|嫡|庶)?(?:女兒|兒子|孩子|後人|後裔|遺孤|骨肉|血脈|女|子)/;
+  if(!P.length&&(m=r2.exec(t))){g1=ents(m[1]);for(i=0;i<g1.length&&i<2;i++)if(royalLab(g1[i]))add(g1[i]);}
+  var r3=/(?:父親|爹爹|爹|生父|親父|親爹|父王)(?:是|為|乃|就是|姓)([^，。；！？\n]{1,14})/g;
+  while((m=r3.exec(t))){g1=ents(m[1]);if(g1.length)add(g1[0],'father');}
+  var r4=/(?:母親|娘親|娘|生母|親娘|母后)(?:是|為|乃|就是)([^，。；！？\n]{1,14})/g;
+  while((m=r4.exec(t))){g1=ents(m[1]);if(g1.length)add(g1[0],'mother');}
+  var r5=/([^，。；！？\n]{2,12})是我的?(?:父親|生父|親爹|爹|母親|生母|娘|親娘|親生父親|親生母親)/g;
+  while((m=r5.exec(t))){g1=ents(m[1]);if(g1.length)add(g1[g1.length-1]);}
+  var r6=/([^，。；！？\n]{2,16}?)之(?:私生)?(?:女|子|後人|後裔|遺孤)/;
+  if(!P.length&&(m=r6.exec(t))){g1=ents(m[1]);for(i=0;i<g1.length&&i<2;i++)if(royalLab(g1[i]))add(g1[i]);}
+  /* 角色：男→father 女→mother */
+  for(i=0;i<P.length;i++){if(!P[i].role)P[i].role=P[i].g==='f'?'mother':(P[i].g==='m'?'father':'');}
+  return P;
+ }
+ function parseMission(t){
+  var res={type:'',target:'',tlab:'',by:''};var m,re=/(刺殺|行刺|暗殺|謀殺|殺死|殺了|殺掉|誅殺|除掉|弒|殺)(?:掉|了|死)?/g;
+  while((m=re.exec(t))){
+   var before=t.slice(Math.max(0,m.index-6),m.index);if(/(被|遭|慘遭|差點|險些|曾|已|都|來)$/.test(before)||/被[^，。；]{0,4}$/.test(before))continue;
+   var rest=t.slice(m.index+m[0].length,m.index+m[0].length+9);var es=ents(rest);if(!es.length||es[0].p>1)continue;
+   var cl=clauseOf(t,m.index);var pre=cl.slice(0,cl.indexOf(m[0]));
+   if(/以為|誤會|認為|相信|懷疑|傳言|聽說/.test(pre))continue;
+   if(!/要我|令我|命我|叫我|讓我|逼我|使我|派我|我[^，。；]{0,6}(?:要|欲|想|必|得|須|將|會|去|誓)|任務|目標|使命|復仇|報仇|誓|奉命|受命/.test(pre)&&!/^我/.test(cl)&&!/^(?:要|去|欲|想)/.test(cl))continue;
+   res.type='assassinate';if(es[0].kind==='npc')res.target=es[0].id;else res.tlab=es[0].lab;
+   var by=pre.match(/(公主|師父|師傅|師尊|主人|主上|組織|幫主|莊主|門主|大王|國君)(?:要|令|命|叫|讓|逼|派|吩咐)我/);if(by)res.by=by[1];
+   break;}
+  if(!res.type){
+   if(/復國|奪位|奪嫡|奪回王位|復辟|稱王|稱帝|登基|謀反|造反|起義|奪回江山/.test(t))res.type='usurp';
+   else if(/復仇|報仇|雪恥|雪恨|血債血償|討回公道|報復|討債/.test(t))res.type='revenge';
+   else if(/尋親|尋找(?:親人|父親|母親|生父|生母|家人|身世)|找(?:到|回)?(?:親人|父親|母親|生父|生母|家人)|想知道[^，。；]{0,6}身世|認祖歸宗|相認|尋父|尋母/.test(t))res.type='seek_kin';
+   else if(/做官|當官|拜相|封侯|拜將|入仕|出人頭地|出將入相|功成名就|位極人臣/.test(t))res.type='rise';
+   else if(/致富|發財|富甲|巨賈|賺大錢|富可敵國/.test(t))res.type='wealth';
+   else if(/求長生|長生不老|不死藥|成仙|求仙/.test(t))res.type='immortal';
+   else if(/尋愛|找到真愛|尋找愛人|找心上人/.test(t))res.type='love';
+   else if(/歸隱|隱居|過平靜|安穩度日|平淡/.test(t))res.type='peace';
+   else if(/找[^，。；]{0,4}(?:解藥|解方|解毒|良醫|名醫)|根治|治好|解毒/.test(t))res.type='cure';
+  }
+  return res;
+ }
+ Origin.parse=function(raw){
+  var norm=Origin.norm(raw);var t=norm.replace(/\s+/g,'');
+  var p={ver:1,raw:String(raw==null?'':raw).slice(0,MAXLEN),norm:norm.slice(0,MAXLEN),parents:[],ev:[],falseFoe:'',believer:'',framedBy:'',foes:[],mission:{type:'',target:'',tlab:'',by:''},afflict:null,tags:[],skills:[],homeland:'',age:0,rich:false,ai:'',fids:{}};
+  if(!t)return p;
+  p.parents=parseParents(t);
+  var i,k;
+  for(i=0;i<EVT.length;i++){var m=EVT[i][1].exec(t);if(m){var cl=clauseOf(t,m.index);var who=/公主|母親|娘|她|夫人|王后/.test(cl)&&!/我(?!的)/.test(cl.replace(/令我|讓我|要我|叫我|使我|逼我|命我|派我/g,''))?'parent':(/我|自己/.test(cl)?'self':'');
+    if(!who&&!/我/.test(cl)&&p.ev.length&&p.ev[p.ev.length-1].who==='parent')who='parent';
+    p.ev.push({k:EVT[i][0],t:EVT[i][2],who:who});}}
+  /* 被陷害／誤會：誰被冤枉、誰誤會 */
+  var fr=t.split(/[，。；！？\n]/);
+  for(i=0;i<fr.length;i++){var s=fr[i];if(!/以為|誤以為|誤會|認為|相信|當作|認定|懷疑/.test(s))continue;var es=ents(s);if(!es.length)continue;
+   var npcs=es.filter(function(e){return e.kind==='npc';});var labs=es.filter(function(e){return e.kind==='lab';});
+   var verbPos=s.search(/以為|誤以為|誤會|認為|相信|當作|認定|懷疑/);
+   var after=npcs.filter(function(e){return e.p>verbPos;});
+   if(after.length&&/要殺|想殺|欲殺|派人|下令|害|殺她|殺他|刺殺|下毒|要害|謀害|追殺/.test(s)){p.falseFoe=after[0].id;
+    var bl=labs.filter(function(e){return e.p<verbPos;});p.believer=bl.length?bl[bl.length-1].lab:(/我/.test(s.slice(0,verbPos))?'我':'');
+    if(!p.believer&&parseParentsLab(p.parents))p.believer=parseParentsLab(p.parents);break;}}
+  if(!p.falseFoe&&/用計|設計|陷害|栽贓|嫁禍|挑撥|離間/.test(t)){var fm=t.match(/(有人|某人|奸人|小人|敵人|仇家|對頭)(?:用計|設計|設局|陷害|栽贓|嫁禍|挑撥|離間)/);if(fm)p.framedBy=fm[1];}
+  if(p.falseFoe||p.framedBy){if(!hasEv(p,'framed'))p.ev.push({k:'framed',t:'被陷害或誤會',who:'parent'});if(p.framedBy==='')p.framedBy=(t.match(/(有人|某人|奸人|小人)/)||['','有人'])[1];}
+  /* 仇人 */
+  var fm2,fre=/(?:仇人|仇家|殺父仇人|殺母仇人|滅門仇人|宿敵|死對頭)(?:是|為|乃)?([^，。；！？\n]{1,10})/g;
+  while((fm2=fre.exec(t))){var fe=ents(fm2[1]);if(fe.length)p.foes.push({id:fe[0].kind==='npc'?fe[0].id:'',lab:fe[0].kind==='lab'?fe[0].lab:'',why:'仇人'});}
+  var fre2=/([^，。；！？\n]{2,8}?)(?:殺了|害死|滅了|毀了|殺害|害了)我(?:的)?(?:父|母|全家|家人|家族|一家|師父|愛人|國)/g;
+  while((fm2=fre2.exec(t))){var fe2=ents(fm2[1]);if(fe2.length)p.foes.push({id:fe2[fe2.length-1].kind==='npc'?fe2[fe2.length-1].id:'',lab:fe2[fe2.length-1].kind==='lab'?fe2[fe2.length-1].lab:'',why:'殺親之仇'});}
+  p.mission=parseMission(t);
+  /* 身上狀態 */
+  var ab=AFFL_RE.test(t);
+  if(ab){var kind=/蠱/.test(t)?'gu':'poison';var cl2=/(公主|師父|師傅|師尊|主人|主上|組織|幫主|莊主|門主)/;
+   var ctrl={role:'unknown',lab:'幕後之人'};
+   if(/公主[^，。；]{0,16}(?:找人|訓練|下毒|控制|命令|要我|讓我|逼我|派)|(?:找人|訓練|下毒|控制|命令|要我|讓我|逼我|派)[^，。；]{0,10}公主|公主[^，。；]{0,6}(?:下了|給我)[^，。；]{0,4}毒/.test(t)||(/公主/.test(t)&&/解藥|劇毒/.test(t)))ctrl={role:'princess',lab:'影先生'};
+   else {var cm=t.match(cl2);if(cm)ctrl={role:'master',lab:cm[1]==='師傅'||cm[1]==='師尊'?'師父':cm[1]};}
+   p.afflict={kind:kind,name:kind==='gu'?'蠱毒':'劇毒',period:periodOf(t),need:/解藥|每(?:個|隔)?[^，。；]{0,4}(?:月|旬|週|周|天|日|季|年)[^，。；]{0,6}(?:服|吃|喝|用|取|領)|定期|按時/.test(t)||true,mind:FOOL_RE.test(t),ctrl:ctrl};
+  } else if(/身患|患有|染上|得了[^，。；]{0,3}病|纏身|舊疾|頑疾|絕症|癆病|咳血|心疾|寒疾|怪病|隱疾|體弱多病|病弱/.test(t)){
+   var per=/每[^，。；]{0,6}(?:服|吃|喝)[^，。；]{0,4}藥|定期服藥|按時服藥|湯藥/.test(t);
+   if(per)p.afflict={kind:'ill',name:'宿疾',period:periodOf(t),need:true,mind:false,ctrl:{role:'none',lab:'醫者'}};
+   p.tags.push('ill');}
+  if(/舊傷|重傷|殘疾|傷疤|斷臂|瘸|跛/.test(t))p.tags.push('wound');
+  if(/失憶|記不起|喪失記憶|不記得/.test(t))p.tags.push('amnesia');
+  if(p.afflict)p.tags.push(p.afflict.kind);
+  for(i=0;i<EVT.length;i++){}
+  /* 技能 */
+  for(i=0;i<SKILLS.length;i++){var sk=SKILLS[i];var s2=t;
+   if(sk[0]==='martial'||sk[0]==='soldier'||sk[0]==='scholar'||sk[0]==='merchant'||sk[0]==='thief'){s2=t.replace(/刺殺|暗殺|被刺|解藥|毒藥|劇毒|公主|將軍之|財物|錢財/g,'');}
+   if(sk[0]==='medic')s2=t.replace(/解藥|毒藥/g,'');
+   if(sk[0]==='thief')s2=t.replace(/影先生|影子/g,'');
+   if(sk[1].test(s2))p.skills.push(sk[0]);}
+  /* 被訓練成刺客 */
+  if(hasEv(p,'trained')&&/刺客|殺手|死士/.test(t)&&p.skills.indexOf('assassin')<0)p.skills.push('assassin');
+  if(p.mission.type==='assassinate'&&p.skills.indexOf('assassin')<0&&p.afflict)p.skills.push('assassin');
+  /* 家國 */
+  var hm=t.match(/(?:是|乃|出身|來自|生於|生在|本是|原是|曾是|我是)(?:.{0,2}?)([韓趙魏楚齊燕])(?:國|人|地)(?!公主|公子|王姬|王孫|王子)/);
+  if(hm)p.homeland=hm[1];
+  /* 年齡：N年前…所生 */
+  var am=t.match(/([一二兩三四五六七八九十\d]{1,3})年前[^，。；]{0,18}(?:所生|生下|之女|之子)/);
+  if(am){var n=cn2n(am[1]);if(!isNaN(n)&&n>=12&&n<=45)p.age=n;}
+  /* 是否「豐富」解析 */
+  p.rich=!!(p.parents.length||p.afflict||p.mission.type==='assassinate'||p.ev.length>=2||p.foes.length||p.falseFoe);
+  p.sum=Origin.line(p);
+  return p;
+ };
+ function parseParentsLab(ps){for(var i=0;i<ps.length;i++){if(ps[i].lab&&ps[i].g==='f')return ps[i].lab;}for(i=0;i<ps.length;i++)if(ps[i].lab)return ps[i].lab;return '';}
+ function hasEv(p,k){for(var i=0;i<p.ev.length;i++)if(p.ev[i].k===k)return true;return false;}
+ Origin.hasEv=hasEv;
+ function pn(x){return x.id&&NPC[x.id]?NPC[x.id].n:(x.lab||'某人');}
+ var MIS={assassinate:'刺殺',usurp:'奪位復國',revenge:'復仇',seek_kin:'尋親',rise:'出人頭地',wealth:'致富',immortal:'求長生',love:'尋愛',peace:'歸隱',cure:'尋解'};
+ var SKN={};for(var si=0;si<SKILLS.length;si++)SKN[SKILLS[si][0]]=SKILLS[si][2];
+ Origin.skillName=function(k){return SKN[k]||k;};
+ /* 一行摘要（給 AI 與預覽）*/
+ Origin.line=function(p){
+  var a=[];
+  if(p.parents.length)a.push('生父母：'+p.parents.map(function(x){return pn(x)+(x.role==='father'?'(父)':(x.role==='mother'?'(母)':''))+(x.id?'':'');}).join('、'));
+  if(p.ev.length)a.push('關鍵事件：'+p.ev.map(function(e){return e.t+(e.who==='parent'?'(上一代)':'');}).join('、'));
+  if(p.falseFoe)a.push('被誤會／蒙冤者：'+pn({id:p.falseFoe})+(p.believer?'（'+p.believer+'誤以為其為兇手）':''));
+  else if(p.framedBy)a.push('陷害者：'+p.framedBy+'（真兇未明）');
+  if(p.foes.length)a.push('仇人：'+p.foes.map(pn).join('、'));
+  if(p.afflict)a.push('身上：'+p.afflict.name+'，每'+p.afflict.period+'日須服解藥'+(p.afflict.mind?'，否則神智漸失':'')+'；控制者：'+p.afflict.ctrl.lab);
+  else if(p.tags.length)a.push('狀態：'+p.tags.join('、'));
+  if(p.mission.type)a.push('目標：'+MIS[p.mission.type]+(p.mission.target?'「'+nm(p.mission.target)+'」':(p.mission.tlab?'「'+p.mission.tlab+'」':''))+(p.mission.by?'（受'+p.mission.by+'所命）':''));
+  if(p.skills.length)a.push('專長：'+p.skills.map(Origin.skillName).join('、'));
+  return a.join('；');
+ };
+ function nm(id){return NPC[id]?NPC[id].n:id;}
+ /* ---------- 路線／屬性／旗標（customMap 的新實作）---------- */
+ function legacy(t,skipDrug){
+  var r={path:'wander',fac:'none',reg:'xianyang',mod:{},gold:60,flags:{},goal:''};t=t||'';
+  var has=function(re){return re.test(t);};
+  if(has(/兵|軍|戰|將|卒|戍|伍/)){r.path='soldier';r.fac='qin';r.mod.wu=8;r.mod.tong=4;r.reg='hangu';}
+  else if(has(/書|學|士|文|儒|法|策|謀|史/)){r.path='adviser';r.fac='qin';r.mod.zhi=8;r.mod.zheng=4;}
+  else if(has(/醫|藥|郎中|毒/)){r.path='physician';r.fac='qin';r.mod.zhi=6;r.mod.stealth=3;r.flags.herb=1;}
+  else if(has(/宮|侍|婢|奴|僕/)){r.path='maid';r.fac='qin';r.mod.mei=5;r.mod.stealth=6;}
+  else if(has(/歌|舞|伎|琴|樂|酒肆/)){r.path='attendant';r.mod.mei=10;r.mod.stealth=3;r.flags.fengyue=1;}
+  else {r.path='wander';}
+  if(has(/商|賈|財|富|錢/)){r.gold+=240;r.mod.zhi=(r.mod.zhi||0)+3;}
+  if(has(/劍|俠|刺|武|拳/)){r.mod.wu=(r.mod.wu||0)+6;}
+  if(has(/盜|賊|竊|影/)){r.mod.stealth=(r.mod.stealth||0)+8;}
+  if(has(/貴|族|世家|公子|小姐/)){r.gold+=200;r.mod.mei=(r.mod.mei||0)+3;}
+  if(has(/趙/)){r.flags.revenge_zhao=1;r.goal='revenge';}else if(has(/韓/)){r.flags.revenge_han=1;r.goal='revenge';}else if(has(/魏/)){r.flags.revenge_wei=1;r.goal='revenge';}else if(has(/楚/)){r.flags.revenge_chu=1;r.goal='revenge';}else if(has(/齊/)){r.flags.revenge_qi=1;r.goal='revenge';}else if(has(/燕/)){r.flags.revenge_yan=1;r.goal='revenge';}
+  if(has(/仇|恨|滅門|血債|報復/)){r.goal='revenge';}
+  return r;
+ }
+ Origin.legacy=legacy;
+ var CMAP={qi:'齊',chu:'楚',yan:'燕',zhao:'趙',han:'韓',wei:'魏'};
+ function add(m,k,v){m[k]=(m[k]||0)+v;}
+ Origin.map=function(raw){
+  var p=Origin.parse(raw);var t=p.norm;
+  if(!p.rich){var r0=legacy(t);r0.prof=p;return r0;}
+  var r={path:'wander',fac:'none',reg:'xianyang',mod:{},gold:60,flags:{},goal:'',prof:p};
+  var sk=p.skills;function has(k){return sk.indexOf(k)>=0;}
+  if(has('assassin')||p.mission.type==='assassinate'){r.path='wander';r.fac='none';r.reg='xianyang';}
+  else{
+   var lt=t.replace(/解藥|毒藥|劇毒|毒發|中毒|被下毒|蠱毒|公主|刺殺|暗殺/g,'');
+   var l=legacy(lt);r.path=l.path;r.fac=l.fac;r.reg=l.reg;
+  }
+  if(has('assassin')){add(r.mod,'wu',8);add(r.mod,'stealth',10);add(r.mod,'zhi',2);}
+  if(has('martial')&&!has('assassin'))add(r.mod,'wu',6);else if(has('martial'))add(r.mod,'wu',2);
+  if(has('soldier')){add(r.mod,'wu',4);add(r.mod,'tong',4);}
+  if(has('scholar')){add(r.mod,'zhi',6);add(r.mod,'zheng',3);}
+  if(has('medic')){add(r.mod,'zhi',4);add(r.mod,'stealth',2);r.flags.herb=1;}
+  if(has('poisoner')){add(r.mod,'zhi',2);add(r.mod,'stealth',3);r.flags.herb=1;}
+  if(has('thief')){add(r.mod,'stealth',6);}
+  if(has('servant')){add(r.mod,'mei',3);add(r.mod,'stealth',4);}
+  if(has('entertainer')){add(r.mod,'mei',8);add(r.mod,'stealth',2);r.flags.fengyue=1;}
+  if(has('merchant')){r.gold+=240;add(r.mod,'zhi',3);}
+  var royal=false;for(var i=0;i<p.parents.length;i++){var x=p.parents[i];if((x.id&&NPC[x.id]&&NPC[x.id].tier>=4)||/公主|王姬|王后|王妃|公子|王孫|王子|太子|王族|宗室|貴族|世家/.test(x.lab||''))royal=true;}
+  if(royal){r.gold+=120;add(r.mod,'mei',3);}
+  if(p.parents.length)add(r.mod,'zhi',1);
+  for(var k in r.mod){if(r.mod[k]>14)r.mod[k]=14;}
+  if(r.gold>520)r.gold=520;
+  /* 目標 */
+  var mt=p.mission.type;
+  r.goal=({assassinate:'revenge',revenge:'revenge',usurp:'rebel',rise:'office',love:'love',peace:'hermit',immortal:'immortal'})[mt]||'';
+  if(!r.goal&&(has('soldier')&&!has('assassin')))r.goal='army';
+  /* 復仇旗標：僅在家破人亡／復仇任務時，並且是玩家自己的家國 */
+  if((mt==='revenge'||hasEv(p,'destroyed'))&&p.homeland){var key={'齊':'qi','楚':'chu','燕':'yan','趙':'zhao','韓':'han','魏':'wei'}[p.homeland];if(key){r.flags['revenge_'+key]=1;if(!r.goal)r.goal='revenge';}}
+  /* 初始旗標 */
+  r.flags.org_rich=1;
+  if(p.parents.length)r.flags.org_blood=1;
+  if(p.afflict)r.flags.org_afflict=1;
+  if(mt)r.flags['org_m_'+mt]=1;
+  for(i=0;i<p.ev.length;i++)r.flags['org_e_'+p.ev[i].k]=1;
+  for(i=0;i<sk.length;i++)r.flags['org_s_'+sk[i]]=1;
+  return r;
+ };
+ Origin.ageOf=function(raw){var p=Origin.parse(raw);return p.age||0;};
+ /* ---------- 取得／補入 ---------- */
+ Origin.P=function(){
+  if(!S||!S.x)return null;
+  var o=S.x.originProfile;
+  if(!o&&S.p&&S.p.origin==='custom'&&S.p.bg){try{o=S.x.originProfile=Origin.parse(S.p.bg);o.legacySave=1;}catch(e){}}
+  return o||null;
+ };
+ /* ---------- 套用到新遊戲（startGame 之後）---------- */
+ Origin.apply=function(raw,m){
+  var p=(m&&m.prof)||Origin.parse(raw);
+  X();S.x.originProfile=p;
+  if(!p.rich){return p;}
+  var i,f;
+  S.flags.org_custom=1;
+  /* 初始人際：生父母暗藏的血脈親近感 */
+  for(i=0;i<p.parents.length;i++){var pa=p.parents[i];if(pa.id&&NPC[pa.id]&&alive(pa.id)){var r=R(pa.id);r.re=clamp(r.re+6,0,100);r.af=clamp(r.af+3,0,100);}}
+  var tg=p.mission.target;
+  if(tg&&NPC[tg]&&alive(tg)){var rt=R(tg);rt.re=clamp(rt.re+4,0,100);rt.su=clamp(rt.su+3,0,100);S.flags['org_target_'+tg]=1;}
+  /* 登記秘辛（只有玩家知道；相關 NPC 不知）*/
+  Origin.registerFacts(p);
+  /* 任務 */
+  Origin.quests(p);
+  /* 毒發系統 */
+  if(window.Poison&&p.afflict)Poison.init(p);
+  /* AI 細化（可選）*/
+  try{Origin.aiRefine(p);}catch(e){if(window.console)console.error('aiRefine',e);}
+  return p;
+ };
+ function ctrlId(p){return p.afflict&&p.afflict.ctrl&&p.afflict.ctrl.role!=='none'&&alive('ying')?'ying':'';}
+ Origin.ctrlId=ctrlId;
+ Origin.registerFacts=function(p){
+  if(!window.Facts)return;
+  var pname=S.p.name,out=[],first=null;
+  function reg(e,key){var arr=Facts.ingest([e],{src:'origin',force:1});if(arr.items.length){p.fids[key]=arr.items[0].f.i;}else if(arr.rej.length){p.rej=(p.rej||[]);p.rej.push(key+':'+arr.rej[0]);}return arr;}
+  /* 1. 血緣 */
+  var npcP=null,other=null;
+  for(var i=0;i<p.parents.length;i++){var x=p.parents[i];if(x.id&&NPC[x.id]){if(!npcP||NPC[x.id].tier>NPC[npcP.id].tier)npcP=x;}}
+  for(i=0;i<p.parents.length;i++){if(p.parents[i]!==npcP&&!(npcP&&p.parents[i].id===npcP.id)){other=p.parents[i];break;}}
+  if(p.parents.length){
+   var lab=other?pn(other):(npcP?'':p.parents[0].lab);
+   var par=npcP?npcP.id:'';
+   var txt=pname+'是'+(npcP?nm(npcP.id):(p.parents[0].lab||'某人'))+(npcP&&other?'與'+pn(other):'')+'所生之'+(S.p.gender==='f'?'女':'子')+'（身世只有自己知道）';
+   var nk=[];if(npcP)nk.push(npcP.id);
+   reg({type:'identity',subject:'p',object:par,kin:'parent',label:lab,text:txt,vis:'secret',knownBy:['p'],notKnownBy:nk,proof:'none',mag:(npcP&&NPC[npcP.id].tier>=4)?3:2},'blood');
+   /* 玩家自設：視為既定事實 */
+   var fb=Facts.get(p.fids.blood);if(fb){fb.st='true';fb.tr=1;fb.pk=1;if(!fb.applied){Facts.applyOnce(fb,{},null);}}
+  }
+  /* 2. 被陷害的真相 */
+  if(p.falseFoe&&alive(p.falseFoe)){
+   reg({type:'secret',subject:'p',object:p.falseFoe,kin:'other',text:'當年有人設局，令'+(p.believer||'受害者')+'誤以為是'+nm(p.falseFoe)+'要下手，'+nm(p.falseFoe)+'其實是被冤枉的（真兇未明）',vis:'secret',knownBy:['p'],notKnownBy:[p.falseFoe],proof:'weak',mag:2},'framed');
+  }else if(p.framedBy){
+   reg({type:'secret',subject:'p',object:'',kin:'other',text:'你的身世背後另有'+p.framedBy+'設下的圈套，真兇未明',vis:'secret',knownBy:['p'],proof:'none',mag:1},'framed');
+  }
+  /* 3. 中毒與控制 */
+  var cid=ctrlId(p);
+  if(p.afflict){
+   var kb=['p'];if(cid)kb.push(cid);
+   reg({type:'secret',subject:'p',object:'',kin:'other',text:pname+'身中'+p.afflict.name+'，每'+p.afflict.period+'日須服一次解藥，解藥掌握在'+p.afflict.ctrl.lab+'手中',vis:'secret',knownBy:kb,notKnownBy:(p.mission.target&&NPC[p.mission.target])?[p.mission.target]:[],proof:'none',mag:2},'afflict');
+  }
+  /* 4. 任務 */
+  if(p.mission.type==='assassinate'&&p.mission.target&&alive(p.mission.target)){
+   var kb2=['p'];if(cid)kb2.push(cid);
+   reg({type:'secret',subject:'p',object:p.mission.target,kin:'enemy',text:pname+'受命刺殺'+nm(p.mission.target)+(p.mission.by?'（受'+p.mission.by+'所命）':''),vis:'secret',knownBy:kb2,notKnownBy:[p.mission.target],proof:'none',mag:2},'mission');
+  }
+ };
+ Origin.quests=function(p){
+  var mt=p.mission.type,tg=p.mission.target;
+  if(mt==='assassinate'&&tg&&NPC[tg]){
+   addQuest({id:'org_main',t:'受命刺殺'+nm(tg),d:'你被派來取'+nm(tg)+'的性命，但當年的真相仍有疑點。你可以動手、坦白、倒戈或查明真相——每條路都通往不同的結局。'+(p.afflict?'（別忘了按時服藥：「💊 體內之毒」）':''),type:'kill',a:{t:tg}});
+  }else if(mt==='revenge'||(mt==='usurp')||mt==='seek_kin'){
+   var T={revenge:['復仇之路','你的仇恨尚未了結。打聽仇人的下落，積蓄力量。'],usurp:['復國之志','你背負著王族之後的志向，需要人脈、錢糧與時機。'],seek_kin:['尋親之路','打聽親人的下落——問長者、查舊事、留意身世的線索。']}[mt];
+   addQuest({id:'org_main',t:T[0],d:T[1]});
+  }
+  if(p.afflict)addQuest({id:'org_cure',t:'尋找根治之法',d:'你身上的'+p.afflict.name+'必須按時服解藥。找到解藥的來源、請醫者研究，或讓控制者交出根治法。（行動選單→「💊 體內之毒」）'});
+  if(p.falseFoe||p.framedBy)addQuest({id:'org_truth',t:'查明當年的真相',d:'有人設局，讓'+(p.believer||'當年的受害者')+'誤會了'+(p.falseFoe?nm(p.falseFoe):'一個人')+'。查出真兇，才能真正解開這段恩怨。（「💊 體內之毒」→「追查舊事」）'});
+ };
+ /* ---------- 開場文字、預覽 ---------- */
+ Origin.openText=function(){
+  var p=Origin.P();if(!p||!p.rich)return '';
+  var l=[];
+  l.push('〔身世解析〕'+p.sum+'。');
+  if(p.age&&S.p.age===p.age)l.push('（依你的身世推算，你今年 '+p.age+' 歲。）');
+  if(p.fids&&p.fids.blood)l.push('（你的血緣是個只有你自己知道的秘密，可在「秘密」面板查看誰知情。）');
+  if(p.afflict)l.push('（你每 '+p.afflict.period+' 日須服一次解藥——不然'+(p.afflict.mind?'會慢慢變成傻子':'病情會加重')+'。手邊有 '+(window.Poison?Poison.doses():0)+' 劑，快捷欄與「💊 體內之毒」可服用。）');
+  return l.join('\n');
+ };
+ Origin.preview=function(raw){
+  var p=Origin.parse(raw);
+  if(!String(raw||'').replace(/\s/g,''))return '（尚未輸入）';
+  if(!p.rich){var m=legacy(p.norm);return '路線：'+(PATHS[m.path]?PATHS[m.path].n:m.path)+'（依關鍵字）';}
+  var m2=Origin.map(raw);
+  return '路線：'+(PATHS[m2.path]?PATHS[m2.path].n:m2.path)+'；'+p.sum+(p.age?'；年齡：'+p.age:'')+(m2.goal&&GOALS[m2.goal]?'；志向：'+GOALS[m2.goal].n:'');
+ };
+ /* ---------- AI 提示 ---------- */
+ Origin.aiLines=function(short){
+  if(!S||!S.p||S.p.origin!=='custom'||!S.p.bg)return '';
+  var p=Origin.P();var raw=String(S.p.bg).slice(0,MAXLEN);
+  var t='玩家自設身世原文：「'+raw+'」。';
+  if(p&&p.rich){t+='【身世解析（已登記為既定事實，須據此安排）】'+p.sum+'。'+(p.ai?'AI補註：'+p.ai+'。':'');
+   if(!short)t+='請依這段身世安排各NPC的態度與劇情：知道內情者與不知情者反應必須不同（例如血緣與使命對相關人物是秘密）；毒發、解藥、控制者、被誤會的人、真兇與使命都要在劇情中持續呼應，但不要讓玩家無路可走。';
+   else t+='請依此身世安排NPC態度與劇情，秘密不知情者不得提及。';}
+  else if(!short)t+='請依這段原文安排NPC態度與劇情，未解析的細節以原文為準。';
+  return t;
+ };
+ Origin.manualNote=function(){var p=Origin.P();if(!p||S.p.origin!=='custom')return '';return '本次提示已附上你的自設身世原文'+(p.rich?'與解析摘要':'')+(S.x.afflict&&S.x.afflict.on?'、毒發／解藥狀態':'')+'。';};
+ var _sm0=null;
+ /* ---------- AI 開局細化（可選，最多一次呼叫，失敗靜默）---------- */
+ Origin.aiRefine=function(p){
+  if(!p||!p.rich||!window.AI||!SET.ai)return;
+  var ok=false;try{ok=AI.ready()&&!AI.manual();}catch(e){}
+  if(!ok)return;
+  var ids=[];for(var i=0;i<NPCS.length&&ids.length<30;i++){if(NPCS[i].tier>=2&&!NPCS[i].hidden)ids.push(NPCS[i].id+'='+NPCS[i].n);}
+  var sys='你是《秦風》的身世解析器。請閱讀玩家自設身世，只輸出一個JSON：{"note":"一句話補註(60字內)","mission":{"type":"assassinate|revenge|seek_kin|usurp|none","target":"npc_id或空"},"period":數字或0,"secrets":["額外的秘密事實(30字內)"]}。npc_id只能用：'+ids.join(',')+'。不要發明歷史人物。';
+  var usr='身世原文：「'+String(p.raw).slice(0,MAXLEN)+'」\n離線解析：'+p.sum;
+  var pr=null;try{pr=AI.call([{role:'system',content:sys},{role:'user',content:usr}],{maxTok:500});}catch(e){return;}
+  if(!pr||!pr.then)return;
+  pr.then(function(r){
+   try{if(!S||!S.x||S.x.originProfile!==p)return;
+    var j=AI.extractJSON(r&&r.text);if(!j||typeof j!=='object')return;
+    if(typeof j.note==='string')p.ai=j.note.replace(/\s+/g,' ').slice(0,60);
+    if(j.mission&&typeof j.mission==='object'&&!p.mission.type&&/^(assassinate|revenge|seek_kin|usurp)$/.test(j.mission.type)){p.mission.type=j.mission.type;if(j.mission.target&&NPC[j.mission.target]&&alive(j.mission.target))p.mission.target=j.mission.target;}
+    if(typeof j.period==='number'&&j.period>=7&&j.period<=120&&p.afflict&&p.afflict.period===30&&window.Poison&&S.x.afflict){S.x.afflict.period=Math.round(j.period);p.afflict.period=Math.round(j.period);}
+    if(Array.isArray(j.secrets)&&window.Facts){for(var k=0;k<j.secrets.length&&k<2;k++){var sx=String(j.secrets[k]||'').slice(0,40);if(sx.length>=6){Facts.ingest([{type:'secret',subject:'p',text:sx,vis:'secret',knownBy:['p'],mag:1}],{src:'origin',force:1});}}}
+    p.sum=Origin.line(p);p.aiDone=1;
+   }catch(e){}
+  },function(){});
+ };
+ /* ---------- 接線 ---------- */
+ var _sm=AI.summary;
+ AI.summary=function(){
+  var s=_sm();
+  try{if(window.Poison&&S.x&&S.x.afflict&&S.x.afflict.on){var l=Poison.aiLine();if(l)s+='\n'+l;}}catch(e){}
+  return s;
+ };
+ var _wr=AI.worldRules;
+ AI.worldRules=function(short){
+  var t=_wr(short);
+  try{
+   if(S&&S.p&&S.p.origin==='custom'&&S.p.bg){
+    t=t.replace(/玩家自訂背景：「[^」]*」。/,'');
+    t+=Origin.aiLines(short);
+   }
+  }catch(e){if(window.console)console.error('origin ai',e);}
+  return t;
+ };
+ /* 舊存檔相容：載入後補 originProfile（不補毒發／秘辛）*/
+ var _fs=fixState;
+ fixState=function(st){st=_fs(st);try{if(st&&st.p&&st.p.origin==='custom'&&st.p.bg){st.x=st.x||{};if(!st.x.originProfile){var keep=S;S=st;try{Origin.P();}finally{S=keep;}}}}catch(e){}return st;};
+})();
+
+/* ---- 63_poison.js ---- */
+/* ===== 秦風 · 毒發／解藥系統（Poison）：S.x.afflict（毒／蠱／宿疾）、病發演出、NPC 反應、解藥來源、多結局 ===== */
+var Poison={};
+(function(){
+ DEFSET.afx=true;DEFSET.aflauto=false;
+ (function(){var i;for(i=0;i<SETSCHEMA.length;i++){if(SETSCHEMA[i][0]==='h'&&/聲音與畫面/.test(SETSCHEMA[i][1]))break;}
+  SETSCHEMA.splice.apply(SETSCHEMA,[i,0,['h','💊 身世與毒發'],['afx','check','病發演出（吐血、暈倒、抽搐等場景與在場者反應；關閉後只留一行文字記錄，較溫和）'],['aflauto','check','到期自動服藥（身上有解藥時，省去提醒）']]);})();
+ INV.IK.mdose={n:'解藥',c:'food',w:0.2,v:0,s:1,d:'壓制體內毒性的解藥，按時服用才能維持神智。（服下後重新計算下次服藥日）',ic:'potion',u:'afflict'};
+ INV.IK.mdose2={n:'緩解湯',c:'food',w:0.3,v:90,s:1,d:'醫者配的替代藥方，只能壓制半期，聊勝於無。',ic:'potion',u:'afflict2'};
+ function A(){return (S&&S.x&&S.x.afflict)||null;}
+ Poison.A=A;
+ function P(){return (S&&S.x&&S.x.originProfile)||null;}
+ function on(){var a=A();return !!(a&&a.on&&!a.cured);}
+ Poison.on=on;
+ function nmx(id){return id==='p'?S.p.name:(NPC[id]?NPC[id].n:'某人');}
+ function D(k){return ({easy:0,normal:1,hard:2,hell:3})[SET.diff]===undefined?1:({easy:0,normal:1,hard:2,hell:3})[SET.diff];}
+ function byD(arr){return arr[D()];}
+ Poison.doses=function(){try{return INV.count('mdose')+INV.count('mdose2');}catch(e){return 0;}};
+ Poison.left=function(){var a=A();return a?a.next-S.day:0;};
+ var STN=['穩定','微恙','恍惚','神智渙散','癡傻邊緣'];
+ Poison.stageName=function(){var a=A();if(!a)return '';if(a.cured)return '已根治';return STN[a.stage||0];};
+ /* ---------- 初始化 ---------- */
+ Poison.init=function(p){
+  var a=p.afflict;X();
+  var cid=window.Origin?Origin.ctrlId(p):'';
+  S.x.afflict={ver:1,on:1,kind:a.kind,name:a.name,period:a.period,next:S.day+a.period,miss:0,stage:0,pen:{},fits:0,lastFit:-99,fitFid:0,
+   ctrl:{lab:a.ctrl.lab,role:a.ctrl.role,npc:cid,st:a.ctrl.role==='none'?'none':'ok',trust:50,paid:0},
+   res:0,clues:0,culprit:'',cured:0,start:S.day,seen:{},mind:a.mind?1:0,rescues:0,dueShown:0,taken:0,cd:{}};
+  try{INV.add('mdose',{qty:1,force:1,how:(a.ctrl.lab||'幕後之人')+'所予',who:cid||''});}catch(e){}
+  if(S.x.afflict.ctrl.st==='ok')qpush(Math.max(2,a.period-supplyLead()),'aflSupply',{});
+  return S.x.afflict;
+ };
+ function supplyLead(){return byD([5,4,2,-1]);}
+ Poison.ensure=function(){/* 舊存檔：沒有此欄位就保持停用 */return A();};
+ /* ---------- 狀態與懲罰 ---------- */
+ var STAGE_AT=[[3,10,20,35],[3,10,20,35],[2,6,13,24],[1,4,9,16]];
+ var PENS=[{},{zhi:-3},{zhi:-8,wu:-3},{zhi:-15,wu:-6,mei:-3},{zhi:-28,wu:-10,mei:-6,zheng:-6}];
+ function stageOf(over){if(D()===0)return 0;var T=STAGE_AT[D()];var s=0;for(var i=0;i<4;i++){if(over>=T[i])s=i+1;}return s;}
+ function penTarget(stage){
+  var base=PENS[stage]||{},m=byD([0,1,1.3,1.6]),o={};
+  for(var k in base){var v=base[k]*m;if(!A().mind){if(k==='zhi')v=v*0.4;if(k==='wu')v=v*1.3;}o[k]=Math.round(v);}
+  return o;
+ }
+ function setPen(target,quick){
+  var a=A(),keys=['zhi','wu','mei','zheng'],i;
+  for(i=0;i<keys.length;i++){var k=keys[i];var cur=a.pen[k]||0,tg=target[k]||0;
+   if(tg<cur){var d=tg-cur;var before=S.p.st[k];S.p.st[k]=clamp(before+d,0,95);a.pen[k]=cur+(S.p.st[k]-before);}
+   else if(tg>cur){var up=quick?(tg-cur):Math.max(1,Math.ceil((tg-cur)*0.34));if(up>tg-cur)up=tg-cur;S.p.st[k]=clamp(S.p.st[k]+up,0,100);a.pen[k]=cur+up;}
+  }
+ }
+ Poison.sync=function(quick){
+  var a=A();if(!a||!a.on)return;
+  var over=a.cured?0:Math.max(0,S.day-a.next);a.miss=over;
+  var st=a.cured?0:stageOf(over);
+  var prev=a.stage;a.stage=st;
+  setPen(a.cured?{}:penTarget(st),quick||a.cured);
+  if(st>prev){
+   if(st===1)addLog('你開始覺得手腳發軟，思緒偶爾斷線——藥效快退了。');
+   else if(st===2)addLog('你的神智時有恍惚，說話前言不搭後語。');
+   else if(st===3)addLog('眼前常常模糊一片，連自己的名字都要想一想才說得出。');
+   else if(st===4){addLog('你的目光渙散，口水順著嘴角流下，連人都認不得了。');}
+  }
+  if(st===4&&prev<4&&!a.rescueAt){a.rescueAt=S.day;if(!S.pending.length||true)S.pending.push(Poison.rescueScene());}
+  if(st<4)a.rescueAt=0;
+ };
+ /* ---------- 服藥 ---------- */
+ Poison.take=function(kind){
+  var a=A();if(!a||!a.on)return '你並沒有需要按時服用的藥。';
+  if(a.cured)return '你的毒已經根治，不必再服藥。';
+  var lite=(kind==='lite');var wasLate=S.day-a.next;var stg=a.stage;
+  var add=lite?Math.round(a.period*0.5):a.period;var base=Math.max(a.next,S.day);
+  a.next=Math.min(base+add,S.day+add+(add>>1));a.taken++;a.lastTake=S.day;a.dueShown=0;
+  S.p.st.hp=Math.min(100,S.p.st.hp+(lite?3:6));
+  Poison.sync(true);
+  var t=lite?'你喝下一碗苦澀的緩解湯，胸口的悶痛稍稍退去。（下次服藥約在 '+(a.next-S.day)+' 天後）':'你把解藥吞下，一股暖流順著喉嚨沉入腹中，顫抖漸漸止住。（下次服藥約在 '+(a.next-S.day)+' 天後）';
+  if(stg>=3)t+='\n混沌的腦子像被清水沖過，你慢慢想起自己是誰、為何在此。';
+  else if(wasLate>0)t+='\n拖了 '+wasLate+' 天才服藥，手腳的虛軟總算慢慢消退。';
+  return t;
+ };
+ /* ---------- 狀態文字 ---------- */
+ Poison.line=function(){var a=A();if(!a||!a.on)return '';if(a.cured)return '已根治';var l=a.next-S.day;return '下次服藥：'+(l>0?l+' 天':(l===0?'今日':'已逾期 '+(-l)+' 天'));};
+ Poison.aiLine=function(){
+  var a=A();if(!a||!a.on)return '';
+  var l=a.next-S.day;
+  var s='【身上狀態】'+a.name+(a.cured?'（已根治）':'：下次服藥 '+(l>=0?l+' 日後':'已逾期'+(-l)+'日')+'，手邊解藥 '+Poison.doses()+' 劑，狀態「'+Poison.stageName()+'」，累計病發 '+a.fits+' 次；控制者：'+(a.ctrl.st==='ok'?a.ctrl.lab:(a.ctrl.st==='cut'?'已決裂':'無'))+'；根治研究 '+a.res+'%。');
+  if(!a.cured)s+='病發時請依在場者性格寫出反應（關心／起疑／趁機利用／告發／暗中調查／逼問）；不知情者不得直接說破病因，知情者見【知情表】。難度為爽玩時不得讓玩家真正惡化或死亡，其他難度也必須保留獲救路線。';
+  return s;
+ };
+ Poison.panelHTML=function(){
+  var a=A();if(!a)return '';
+  var l=a.next-S.day;
+  var h='<div class="sec"><h4>💊 體內之'+esc(a.name)+'</h4>';
+  if(a.cured)h+='<div class="hint">已根治，不必再服藥。</div>';
+  else{
+   h+='<div class="chips"><span class="chip2">'+esc(Poison.line())+'</span><span class="chip2">解藥 <b>'+Poison.doses()+'</b> 劑</span><span class="chip2">狀態 <b>'+esc(Poison.stageName())+'</b></span><span class="chip2">研究 <b>'+a.res+'%</b></span></div>';
+   h+='<div class="hint" style="margin-top:6px">'+(a.ctrl.st==='ok'?'解藥來源：'+esc(a.ctrl.lab)+'。':(a.ctrl.st==='cut'?'你已與控制者決裂，需另覓藥源。':'解藥靠醫者配製。'))+(D()===0?'（爽玩：不會真正惡化，只會偶發病發表現。）':'')+'</div>';}
+  return h+'</div>';
+ };
+ /* ---------- 病發 ---------- */
+ var SYM=[{k:'blood',n:'吐血',t:'喉頭猛地一甜，你掩住口，指縫間滲出暗紅發黑的血。'},{k:'faint',n:'暈倒',t:'眼前驟然一黑，雙膝一軟，你直挺挺地栽倒在地。'},
+  {k:'convulse',n:'抽搐',t:'四肢不受控制地繃緊、抽搐起來，牙關咯咯作響。'},{k:'chill',n:'冷汗發抖',t:'冷汗一瞬間浸透了衣背，全身止不住地發抖，手裡的東西落在了地上。'}];
+ function fitP(){
+  var a=A(),l=a.next-S.day,over=Math.max(0,-l);
+  var b=byD([0.012,0.014,0.02,0.028]);if(l<=3)b*=2.2;if(over>0)b*=2+Math.min(over,20)/6;
+  return Math.min(0.5,b);
+ }
+ Poison.fitP=fitP;
+ var KIND_LABEL={care:'關心',suspect:'起疑',exploit:'趁機利用',accuse:'告發',investigate:'暗中調查',interrogate:'逼問'};
+ Poison.KIND_LABEL=KIND_LABEL;
+ function reactKind(K){
+  var n=NPC[K],r=R(K),g=regard(K);
+  if(K==='xiawuju')return 'care';
+  if(K==='ying'&&A().ctrl.npc==='ying'&&A().ctrl.st==='ok')return 'care';
+  if(g>=25&&n.hon>=30||r.lo>=40||r.af>=55)return 'care';
+  if(n.amb>=75&&g<30)return 'exploit';
+  if(n.hon>=65&&n.tier>=3&&g<20)return 'accuse';
+  if(r.su>=25||n.sus>=70&&g<30)return n.zh>=70?'investigate':'suspect';
+  if(n.cru>=55&&g<30)return 'interrogate';
+  return n.sus>=55?'suspect':'care';
+ }
+ Poison.reactKind=reactKind;
+ var LINES={
+  lbw:{care:'呂不韋眉頭一擰，竟親自上前扶住你：「來人，傳醫！」他低頭細看你的臉，神色古怪，「奇怪……你這眉眼，我總覺得在哪裡見過。」',suspect:'呂不韋瞇起眼，指尖按上你的脈門：「唇紫、爪青——這不是病，是毒。誰給你下的？」',exploit:'呂不韋不動聲色地扶了你一把，眼底卻掠過商人的算計：「中了毒的人，最聽話……往後有事，我自會吩咐。」',accuse:'呂不韋收回手，淡淡道：「相府容不得來歷不明的病人。」他已低聲吩咐門客：「去，把這件事報給廷尉。」',investigate:'呂不韋沒有多問，只淡淡吩咐一名門客：「去查查這人的底細，連他吃的藥一起查。」',interrogate:'呂不韋緩緩蹲下身，聲音很輕卻不容拒絕：「說，你背後是誰？」'},
+  lisi:{care:'李斯愣了一瞬，還是蹲下身替你鬆開衣領：「先別動。你這症狀……我在書上讀過，是慢毒。」',suspect:'李斯後退半步，目光冷靜地打量你：「毒入肺腑，卻還能站著辦事——你是誰的人？」',exploit:'李斯扶起你，語氣溫和：「這種事若傳出去於你不利。不過，我倒是可以替你瞞著——只要你日後記得今日。」',accuse:'李斯整了整衣冠：「依秦律，身懷怪疾而隱瞞者……我會如實稟報。」',investigate:'李斯不動聲色地記下了你發作的時辰與症狀，轉身在竹簡上刻下幾行字。',interrogate:'李斯擋住你的去路：「毒從何來？為何而服藥？請回答，否則我只好請人來問。」'},
+  yingzheng:{care:'少年秦王站在原地，眼神複雜，過了半晌才對左右道：「傳夏無且。」又低聲說，「……別死在寡人面前。」',suspect:'嬴政盯著你，嘴角抿成一條線：「寡人身邊，不留來歷不明的病人。」',exploit:'嬴政淡淡道：「中了毒的人，總是特別聽話。」他似乎在盤算著什麼。',accuse:'嬴政的聲音很輕，卻讓人背脊發涼：「趙高，把此人的事記下。寡人要知道，誰在給他解藥。」',investigate:'嬴政沒有說話，只是看了身邊的內侍一眼。你知道，從此多了一雙眼睛盯著你。',interrogate:'嬴政一步步走近，冷聲道：「寡人最討厭被人隱瞞。是誰要你來的？」'},
+  xiawuju:{care:'夏無且已搭上你的脈，臉色驟變：「這是慢毒，配方陰狠……但並非無解。給我些時日，我或許能試著解它。」',suspect:'夏無且皺眉：「脈象很怪，不像病。你……願意告訴我實情嗎？」',exploit:'夏無且猶豫地看著你：「我能救你，但這藥方，我要拿去研究。」',accuse:'夏無且嘆了口氣：「醫者本分，我不會說出去。」',investigate:'夏無且默默記下了你的症狀，眼神專注而認真。',interrogate:'夏無且按住你的手腕：「別動。這毒是誰下的？不說，我沒法對症。」'},
+  zhaoji:{care:'趙姬慌忙放下手中的物件，快步走來：「怎麼了這是？快，來人扶他進去！」',suspect:'趙姬以袖掩口，眼底閃過一絲疑慮：「這病來得古怪……你可別是帶了什麼不乾淨的東西進宮。」',exploit:'趙姬輕聲笑了笑：「唉，真可憐。不過哀家倒覺得，你欠哀家一個人情了。」',accuse:'趙姬變了臉色：「此事須稟明大王……不，還是別驚動了。」她猶豫了一下。',investigate:'趙姬低聲吩咐心腹：「去看看他平日都跟誰往來。」',interrogate:'趙姬擋在你面前：「你瞞著哀家什麼？」'},
+  laoai:{care:'嫪毐咧嘴一笑，倒是上前扶了你一把：「喲，沒事吧？來人！」',suspect:'嫪毐上下打量著你：「這症狀……可不像尋常的病。」',exploit:'嫪毐嘿嘿一笑：「得了怪病，總要有人罩著。往後跟我混，我替你擺平。」',accuse:'嫪毐轉身便走：「這事我得跟太后說說。」',investigate:'嫪毐若有所思地摸了摸下巴：「有意思。派人盯著他。」',interrogate:'嫪毐一把揪住你的衣領：「說！背後是誰指使的？」'},
+  ying:{care:'影靜靜地站在一旁，遞來半片壓舌的藥：「撐得住就別倒下。時辰到了，記得服藥。」'}
+ };
+ var GEN={
+  care:['{N}連忙上前扶住你：「你怎麼了？要不要緊？」','{N}臉上寫滿關切：「你的臉色難看極了，快坐下歇歇。」'],
+  suspect:['{N}退開一步，眼神裡多了幾分戒備：「你這是什麼病？」','{N}皺眉打量著你：「好端端的怎會如此？」'],
+  exploit:['{N}扶了你一把，嘴角卻掛著意味深長的笑：「這可是個值得記下的把柄。」','{N}不動聲色地靠近：「你的秘密，我替你保著。當然……不是白保。」'],
+  accuse:['{N}冷下臉：「身懷怪疾還敢出入此地？我得稟報上頭。」','{N}厲聲道：「此事關乎安危，不可隱瞞！」'],
+  investigate:['{N}沒有出聲，只默默記住了你發作的情形。','{N}若有所思地盯著你，轉身低聲吩咐了什麼。'],
+  interrogate:['{N}一把攔住你：「說清楚，你到底怎麼回事？」','{N}逼近一步：「別想蒙混過去。」']
+ };
+ function lineOf(K,kind){var d=LINES[K];if(d&&d[kind])return d[kind];if(K==='ying'&&!d)return '';var a=GEN[kind]||GEN.care;return fmtLine(a[(K.length+S.day)%a.length],nmx(K));}
+ function fmtLine(s,n){return String(s).replace(/\{N\}/g,n);}
+ Poison.lineOf=lineOf;
+ /* 在場者 */
+ Poison.witnesses=function(inId){
+  var ids=[];
+  try{var w=Facts.witnesses('',inId||'');for(var k in w){if(NPC[k]&&alive(k)&&!NPC[k].child&&NPC[k].tier>=1&&(k===inId||spotOf(k)===S.p.spot))ids.push(k);}}catch(e){}
+  if(inId&&NPC[inId]&&alive(inId)&&ids.indexOf(inId)<0)ids.unshift(inId);
+  ids.sort(function(a,b){if(a===inId)return -1;if(b===inId)return 1;return NPC[b].tier-NPC[a].tier;});
+  return ids.slice(0,3);
+ };
+ function canFit(){var a=A();return on()&&(S.day-(a.lastFit||-99))>=byD([6,4,3,3]);}
+ Poison.canFit=canFit;
+ function pickSym(){var a=A();var w=a.stage>=3?[1,2,2,1]:[2,1,1,3];var tot=0,i;for(i=0;i<4;i++)tot+=w[i];var r=rnd(tot);for(i=0;i<4;i++){r-=w[i];if(r<0)return SYM[i];}return SYM[3];}
+ /* 建立病發場景（並套用身體代價）；回傳 scene 或 null（演出關閉）*/
+ Poison.fit=function(o){
+  o=o||{};var a=A();if(!on())return null;
+  var sym=SYM[0];for(var i=0;i<SYM.length;i++){if(SYM[i].k===o.sym)sym=SYM[i];}
+  if(!o.sym)sym=pickSym();
+  a.lastFit=S.day;a.fits++;
+  var loss=byD([1,4,6,8])*(sym.k==='blood'?1.3:1)*(sym.k==='faint'?1.1:1);loss=Math.round(loss);
+  if(S.p.st.hp>10)S.p.st.hp=Math.max(10,S.p.st.hp-loss);
+  if(SET.afx===false){addLog('【病發】'+sym.n+'，所幸很快過去。');return null;}
+  var inId=o.inId||'';
+  var ws=o.alone?[]:Poison.witnesses(inId);
+  var kinds={},lines=[];
+  for(i=0;i<ws.length;i++){kinds[ws[i]]=reactKind(ws[i]);var ln=lineOf(ws[i],kinds[ws[i]]);if(ln)lines.push(ln);}
+  var t='【病發·'+sym.n+'】\n'+sym.t+(sym.k==='faint'&&D()>0?'\n（昏迷了約半個時辰）':'');
+  if(!ws.length)t+='\n\n四下無人。你獨自撐過這一陣，才發現衣衫已被冷汗溻透。'+(Poison.doses()>0?'懷裡還有解藥——':'');
+  else t+='\n\n'+lines.join('\n');
+  var c=[];
+  if(!ws.length){
+   if(Poison.doses()>0)c.push(ch('💊 服下解藥緩解','aflFit',{k:'alone_take',inId:inId}));
+   c.push(ch('咬牙撐過去','aflFit',{k:'alone_rest',inId:inId}));
+   c.push(ch('躺下休息一會兒','aflFit',{k:'alone_rest',inId:inId,rest:1}));
+  }else{
+   var A0={ws:ws,kinds:kinds,sym:sym.k,inId:inId};
+   var mk=function(k){var x={};for(var q in A0)x[q]=A0[q];x.k=k;return x;};
+   c.push(ch('💪 硬撐過去，若無其事','aflFit',mk('tough')));
+   c.push(ch('🗣 找藉口搪塞','aflFit',mk('excuse')));
+   c.push(ch('🤲 坦白身中劇毒','aflFit',mk('confess')));
+   c.push(ch('🆘 向'+nmx(ws[0])+'求助','aflFit',mk('help')));
+  }
+  var sc=scene(t,ws[0]||'',{bg:S.p.spot,kind:inId?'talk':'event',tag:'病發',ch:c});
+  Poison.log('病發：'+sym.n+(ws.length?'，'+ws.map(nmx).join('、')+'在場':'（無人在場）'));
+  return sc;
+ };
+ Poison.log=function(t){var a=A();if(!a)return;a.hist=a.hist||[];a.hist.push({d:S.day,t:t});if(a.hist.length>30)a.hist.shift();};
+ /* 病發秘密（Facts）：在場者知情，其他人不知，經社交圖傳播 */
+ function fitFact(ws){
+  var a=A();if(!window.Facts||!ws.length)return null;
+  var f=a.fitFid?Facts.get(a.fitFid):null;
+  if(f&&f.st!=='refuted')return f;
+  var res=Facts.ingest([{type:'secret',subject:'p',text:S.p.name+'身患怪病，會無預警地吐血、昏厥或抽搐',vis:'secret',knownBy:['p'],proof:'none',mag:1}],{src:'origin',force:1});
+  if(res.items.length){f=res.items[0].f;a.fitFid=f.i;return f;}
+  return null;
+ }
+ function learnFit(K,f,b){if(!f||!alive(K))return;try{Facts.learn(K,f,'',b,true);}catch(e){}}
+ var RXK={care:{tr:3,af:4,su:-2},suspect:{su:6,tr:-2},exploit:{su:3,af:-2},accuse:{su:9,tr:-4,ha:2},investigate:{su:4},interrogate:{su:5,fe:2,tr:-1}};
+ function reactApply(K,kind,mult){
+  var d=RXK[kind]||{};
+  for(var dim in d){var v=Math.round(d[dim]*mult);if(v)addRel(K,dim,v,null);}
+  addMem(K,'親眼見到'+S.p.name+'當場病發，'+({care:'很是擔心',suspect:'心生疑竇',exploit:'暗自盤算',accuse:'打算稟報上頭',investigate:'決定暗中查個明白',interrogate:'追問不休'}[kind]||'')+'。');
+  S.flags['afl_saw_'+K]=S.day;
+  if(kind==='exploit'&&mult>=0.5&&!S.flags['afl_lev_'+K]){S.flags['afl_lev_'+K]=S.day;qpush(5+rnd(6),'aflExploit',{k:K});}
+  else if(kind==='investigate'&&mult>=0.5&&!S.flags['afl_prb_'+K]){S.flags['afl_prb_'+K]=S.day;qpush(6+rnd(7),'aflProbe',{k:K});}
+  else if(kind==='accuse'&&mult>=0.5&&!S.flags['afl_acc_'+K]){S.flags['afl_acc_'+K]=S.day;S.p.wanted=clamp(S.p.wanted+3,0,100);try{addNews('傳聞：有人見'+S.p.name+'當場病發，似是身中奇毒，恐非善類。');}catch(e){}
+   var f=A().fitFid?Facts.get(A().fitFid):null;if(f&&f.vis<1)f.vis=1;}
+ }
+ /* ---------- 病發選項結算 ---------- */
+ NODES.aflFit=function(a){
+  var ax=A();if(!ax)return NODES.hub();
+  var back=function(){var c=[];if(a.inId&&alive(a.inId))c.push(ch('↩ 繼續交談','talkMenu',{id:a.inId,pass:1}));c.push(ch('繼續','hub'));return c;};
+  var k=a.k,P0=S.p.st,fx={st:{}},t='';
+  if(k==='alone_take'){t=Poison.take(INV.count('mdose')?'full':'lite');INV.take(INV.count('mdose')?'mdose':'mdose2',1);return resultScene('服藥',t,'',S.p.spot,back());}
+  if(k==='alone_rest'){fx.days=a.rest?1:0;t=a.rest?'你靠牆躺了一會兒，呼吸漸漸平穩。這次，沒有人看見。':'你咬著牙，一點一點把顫抖壓了下去。這次，沒有人看見。';var out0=applyFx(fx);return resultScene('病發',t+fxLine(out0),'',S.p.spot,back());}
+  var ws=a.ws||[];var kinds=a.kinds||{};var easy=D()===0;var prim=ws[0]||'';
+  var sus=0;ws.forEach(function(K){sus+=NPC[K]?NPC[K].sus:50;});sus=ws.length?sus/ws.length:50;
+  var ok=true,mult=1,learn=ws.slice(),out=[];
+  if(k==='tough'){ok=roll(40+P0.wu/3+P0.hp/6-sus/5+(easy?35:0));mult=ok?0.4:1.3;t=ok?'你用力掐住掌心，硬生生把顫抖壓了下去，擦了擦嘴角：「老毛病了，不礙事。」眾人半信半疑。':'你咬牙想撐住，卻晃了晃，又吐出一口血來。這下誰都看得出來——你絕不是「沒事」。';if(!ok)fx.st.hp=-2;
+   if(ok)learn=ws.filter(function(K){return NPC[K].sus>=60||kinds[K]==='suspect'||kinds[K]==='investigate'||kinds[K]==='interrogate';});}
+  else if(k==='excuse'){ok=roll(30+P0.zhi/2+P0.mei/4-sus/3+(easy?30:0));mult=ok?0.15:1.5;t=ok?'你苦笑著擺手：「昨夜吃壞了肚子，受了寒——不礙事。」說得合情合理，眾人漸漸信了。':'你編了個吃壞肚子的藉口，可誰也沒信——哪有人吃壞肚子會吐黑血的？對方的眼神更冷了。';if(ok)learn=[];else {ws.forEach(function(K){addRel(K,'su',5,null);});}}
+  else if(k==='confess'){mult=0.9;t='你喘息著，低聲道：「我身上有毒……每月須服解藥，不然會慢慢變成傻子。」';
+   ws.forEach(function(K){var pf=P()&&P().fids&&P().fids.afflict?Facts.get(P().fids.afflict):null;if(pf)Facts.learn(K,pf,'p',90,true);});}
+  else if(k==='help'){
+   var kd=kinds[prim]||'care';mult=0.6;
+   if(kd==='care'){
+    if(prim==='xiawuju'){ax.res=Math.min(100,ax.res+25);try{INV.add('mdose2',{qty:1,force:1,how:'夏無且所贈',who:'xiawuju'});}catch(e){}t='夏無且二話不說，把你扶到藥舖後室，針灸、煎藥忙了半夜。他留下一帖緩解湯，也記下了你的毒象：「我會把它當成一個題目來解。」\n（解毒研究 +25%，得緩解湯 ×1）';R('xiawuju').tr=clamp(R('xiawuju').tr+6,0,100);}
+    else if(prim==='lbw'){ax.res=Math.min(100,ax.res+20);S.flags.org_lbw_med=S.day;addRel('lbw','af',4,null);t='呂不韋親自吩咐：「把府裡最好的醫官請來。」半個時辰後，醫官診過脈，小聲對他說了什麼，呂不韋的眼神深了下去。他只道：「好生歇著，缺什麼，跟管事說。」\n（解毒研究 +20%）';}
+    else {ax.res=Math.min(100,ax.res+8);var gotL=roll(50);if(gotL){try{INV.add('mdose2',{qty:1,force:1,how:nmx(prim)+'所贈',who:prim});}catch(e){}}t=nmx(prim)+'扶你坐下，派人尋來郎中，替你開了方子。'+(gotL?'還送了你一帖緩解湯。':'')+'\n（解毒研究 +8%）';}
+   }else if(kd==='exploit'){var fee=60+rnd(60);fx.st.gold=-Math.min(fee,Math.max(0,P0.gold));ax.res=Math.min(100,ax.res+6);t=nmx(prim)+'答應幫你，條件是一筆「辛苦錢」：'+fee+'金。你知道，這份人情要還。';}
+   else {t=nmx(prim)+'後退半步：「這種事，我幫不了你。」眼神裡滿是戒備。';addRel(prim,'su',5,null);}
+  }
+  var o1=applyFx(fx);
+  var f=null;if(k!=='excuse'||!ok){f=fitFact(ws);}
+  ws.forEach(function(K){
+   var kd=kinds[K]||'care';
+   if(learn.indexOf(K)>=0&&f)learnFit(K,f,k==='confess'?92:(ok?55:85));
+   reactApply(K,kd,mult);
+  });
+  if(k==='tough'&&ok&&!learn.length)t+='\n（沒有人看出端倪。）';
+  var tail=ws.length?'\n\n〔'+ws.map(function(K){return nmx(K)+'：'+KIND_LABEL[kinds[K]||'care'];}).join('　')+'〕':'';
+  var sc=resultScene('病發',t+tail+fxLine(o1),prim,S.p.spot,back());
+  return sc;
+ };
+ /* ---------- 每日 ---------- */
+ var _dh=dayHook;
+ dayHook=function(){
+  _dh();
+  try{Poison.tickDay();}catch(e){if(window.console)console.error('Poison day',e);}
+ };
+ Poison.tickDay=function(){
+  var a=A();if(!a||!a.on)return;
+  if(a.cured){Poison.sync(true);return;}
+  var l=a.next-S.day;
+  Poison.sync(false);
+  if(a.stage>=3&&D()>0&&(S.day%2===0)&&S.p.st.hp>(D()>=2?12:20))S.p.st.hp-=1;
+  if(l===3)addLog('離下次服藥還有三天。');
+  if(l===1){try{toast('💊 明日須服藥',2200);}catch(e){}}
+  if(l<=0&&a.dueShown!==a.next){
+   a.dueShown=a.next;
+   if(SET.aflauto&&Poison.doses()>0){var t0=Poison.take(INV.count('mdose')?'full':'lite');INV.take(INV.count('mdose')?'mdose':'mdose2',1);addLog('（自動）'+t0.split('\n')[0]);}
+   else if(!S.pending.length)S.pending.push(Poison.dueScene());
+  }
+  if(a.forceFit){var fs=a.forceFit;a.forceFit=0;var sc0=Poison.fit({sym:fs});if(sc0&&!S.pending.length)S.pending.push(sc0);return;}
+  if(canFit()&&rand()<fitP()){var sc=Poison.fit({});if(sc&&!S.pending.length)S.pending.push(sc);}
+ };
+ Poison.dueScene=function(){
+  var a=A(),d=Poison.doses();
+  var t='【服藥時辰】\n你按了按發涼的指尖——到了該服解藥的日子。'+(d>0?'懷裡還有 '+d+' 劑。':'可是懷裡已沒有解藥了……')+'\n（'+Poison.line()+'）';
+  var c=[];if(d>0)c.push(ch('💊 服藥','afl',{op:'take'}));
+  c.push(ch('💊 體內之毒（其他辦法）','afl',{op:'menu'}));
+  c.push(ch('先不管，繼續','hub'));
+  return scene(t,'',{bg:S.p.spot,kind:'event',tag:'服藥',ch:c});
+ };
+ /* ---------- 談話中病發 ---------- */
+ function talkHook(name,mulBase){
+  var _n=NODES[name];if(!_n)return;
+  NODES[name]=function(a){
+   var sc=_n(a);
+   try{
+    var id=a&&a.id;var npcId=NPC[id]?id:(sc&&sc.sp&&NPC[sc.sp]?sc.sp:'');
+    if(on()&&SET.afx!==false&&npcId&&sc&&(sc.kind==='talk'||sc.kind==='result'||sc.kind==='event')&&alive(npcId)&&canFit()){
+     var A1=A();var force=A1.forceTalkFit;
+     if(force||rand()<Math.min(0.3,fitP()*mulBase)){
+      A1.forceTalkFit=0;var f=Poison.fit({inId:npcId,sym:typeof force==='string'?force:undefined});
+      if(f){f.t=(sc.t||'').replace(/\s+$/,'')+'\n\n———\n'+f.t;return f;}
+     }
+    }
+   }catch(e){if(window.console)console.error('talk fit',e);}
+   return sc;
+  };
+ }
+ talkHook('doTalk',6);talkHook('dt',3);
+ /* ---------- 隊列事件 ---------- */
+ QH.aflSupply=function(a){
+  var A1=A();if(!A1||!A1.on||A1.cured||A1.ctrl.st!=='ok')return null;
+  qpush(A1.period,'aflSupply',{});
+  var t=P()&&P().mission.target;
+  var price=byD([0,0,40,90]);
+  var cid=A1.ctrl.npc||'ying';
+  var c=[];
+  var dead=t&&!alive(t);
+  var txt='【'+A1.ctrl.lab+'來訪】\n夜裡，窗櫺輕輕響了一聲。'+A1.ctrl.lab+'的身影立在陰影裡，像一縷沒有重量的煙。\n';
+  if(dead&&!S.flags['killed_by_p_'+t]){
+   txt+='「'+nmx(t)+'死了——不是你動的手。」他沉默片刻，丟下一只小瓶，「公主說，罷了。這是最後一份，也是根治的。」\n';
+   Poison.cure('控制者留下了根治之藥');txt+='（你的毒，終於根治了。）';
+   return scene(txt,cid,{bg:'home',kind:'event',ch:[ch('繼續','hub')]});
+  }
+  txt+='「這個月的解藥。」他遞來一包藥，「'+(t?nmx(t)+'還活著。公主在等。':'公主在等你的消息。')+'」'+(price?'\n他補了一句：「這個月的『辛苦錢』，'+price+'金。」':'');
+  c.push(ch('接過解藥'+(price?'（-'+price+'金）':''),'afl',{op:'supplyTake',price:price}));
+  c.push(ch('質問當年的事','afl',{op:'ask'}));
+  c.push(ch('💊 體內之毒','afl',{op:'menu'}));
+  return scene(txt,cid,{bg:'home',kind:'event',tag:'解藥',ch:c});
+ };
+ QH.aflExploit=function(a){
+  var K=a.k;if(!K||!alive(K)||!on())return null;
+  var fee=70+rnd(80);
+  return scene('【把柄】\n'+nmx(K)+'找上門來，笑得很客氣：「那天你病發的事，我一直替你瞞著呢。最近手頭有些緊……」',K,{bg:S.p.spot,kind:'event',tag:'趁火打劫',
+   ch:[ch('給他 '+fee+' 金，封口','afl',{op:'exploitPay',k:K,fee:fee}),ch('強硬拒絕','afl',{op:'exploitNo',k:K}),ch('反過來威脅他','afl',{op:'exploitThreat',k:K})]});
+ };
+ QH.aflProbe=function(a){
+  var K=a.k;if(!K||!alive(K)||!on())return null;
+  var pf=P()&&P().fids&&P().fids.afflict?Facts.get(P().fids.afflict):null;
+  var found=roll(35+(NPC[K].zh||50)/3-S.p.st.stealth/4);
+  if(found&&pf){Facts.learn(K,pf,'',72,true);}
+  return scene('【暗中調查】\n'+(found?nmx(K)+'的人查到了你的藥——你長期服用一種來歷不明的解藥，這件事如今多了一個知情者。':nmx(K)+'的人在你周圍轉了幾圈，什麼也沒查到，卻讓你一整天都不自在。'),K,{bg:S.p.spot,kind:'event',tag:'暗查',ch:[ch('繼續','hub')]});
+ };
+ QH.aflHunt=function(a){
+  var A1=A();if(!A1||!A1.on||A1.ctrl.st!=='cut')return null;
+  return scene('【影來了】\n黃昏，巷口站著一個熟悉的影子。「你背叛了公主。」'+A1.ctrl.lab+'的聲音沒有起伏，「回來，還能活。」',A1.ctrl.npc||'ying',{bg:'market',kind:'event',tag:'追殺',
+   ch:[ch('回去，繼續聽命','afl',{op:'huntBack'}),ch('拔刀應戰','afl',{op:'huntFight'}),ch('說服他：真相另有隱情','afl',{op:'huntTalk'})]});
+ };
+ /* ---------- 根治 ---------- */
+ Poison.cure=function(why){
+  var a=A();if(!a)return;a.cured=1;a.cureWhy=why||'';a.cureDay=S.day;Poison.sync(true);S.flags.org_cured=S.day;
+  try{questState('org_cure','done');}catch(e){}
+  addLog('【根治】你體內的'+a.name+'被根治了（'+(why||'')+'）。');
+ };
+ /* ---------- 求助／選單 ---------- */
+ function menuScene(){
+  var a=A();var t='【體內之'+a.name+'】\n'+Poison.line()+'　　解藥 '+Poison.doses()+' 劑　　狀態：'+Poison.stageName()+'　　解毒研究 '+a.res+'%\n';
+  var p=P();
+  if(a.cured)return resultScene('體內之毒',t+'你已被根治。從此不必再算日子。','',S.p.spot,[ch('繼續','hub')]);
+  t+=a.ctrl.st==='ok'?'解藥來源：'+a.ctrl.lab+'（信任 '+a.ctrl.trust+'）。\n':(a.ctrl.st==='cut'?'你已與'+a.ctrl.lab+'決裂，只能另尋藥源。\n':'');
+  if(D()===0)t+='（爽玩：不會因斷藥而真正惡化，只會偶發病發。）\n';
+  else t+='（斷藥越久，神智越差——但總有辦法救回來。）\n';
+  var c=[];
+  if(Poison.doses()>0)c.push(ch('💊 服藥','afl',{op:'take'},null,{g:'解藥'}));
+  if(a.ctrl.st==='ok'){c.push(ch('🕯 聯絡'+a.ctrl.lab,'afl',{op:'ctrl'},null,{g:'解藥'}));c.push(ch('🗝 偷藥','afl',{op:'steal'},null,{g:'解藥'}));}
+  c.push(ch('🩺 請醫者研究解方','afl',{op:'research'},null,{g:'解方'}));
+  c.push(ch('🧪 向醫者買緩解湯','afl',{op:'buy'},null,{g:'解方'}));
+  if(alive('lbw')&&p&&p.mission.target==='lbw')c.push(ch('🗣 向呂不韋坦白','afl',{op:'lbw'},null,{g:'抉擇'}));
+  else if(alive('lbw')&&R('lbw').met)c.push(ch('🗣 向呂不韋求助','afl',{op:'lbw'},null,{g:'抉擇'}));
+  if(p&&(p.falseFoe||p.framedBy))c.push(ch('🧭 追查舊事（'+a.clues+'/3）','afl',{op:'truth'},null,{g:'真相'}));
+  if(a.clues>=3&&a.culprit&&!S.flags.org_truth_done)c.push(ch('⚖ 揭發真兇','afl',{op:'expose'},null,{g:'真相'}));
+  if(a.clues>=3&&alive('lbw')&&a.ctrl.st!=='dead')c.push(ch('🕊 帶公主與呂不韋和解','afl',{op:'peace'},null,{g:'抉擇'}));
+  if(a.res>=100)c.push(ch('⚗ 配製根治之藥','afl',{op:'curebrew'},null,{g:'解方'}));
+  if(a.ctrl.st==='ok')c.push(ch('⚔ 與'+a.ctrl.lab+'決裂（倒戈）','afl',{op:'defect'},null,{g:'抉擇'}));
+  c.push(ch('↩ 返回','hub',null,null,{g:'其他'}));
+  return scene(t,a.ctrl.npc||'',{bg:S.p.spot,kind:'menu',ch:c});
+ }
+ function done(title,t,sp,extra){return resultScene(title,t,sp||'',S.p.spot,(extra||[]).concat([ch('💊 體內之毒','afl',{op:'menu'}),ch('繼續','hub')]));}
+ NODES.afl=function(a){
+  var ax=A();if(!ax)return resultScene('','你身上並沒有需要按時服用的藥。');
+  var op=a.op,p=P(),fx={st:{}},t='',i;
+  var st=S.p.st;
+  if(op==='menu')return menuScene();
+  if(op==='take'){
+   if(Poison.doses()<=0)return done('服藥','你翻遍行囊，卻找不到一劑解藥。');
+   var full=INV.count('mdose')>0;t=Poison.take(full?'full':'lite');INV.take(full?'mdose':'mdose2',1);
+   return done('服藥',t);
+  }
+  if(op==='supplyTake'){
+   var price=a.price||0;if(price>0){if(st.gold>=price)st.gold-=price;else{t='你掏不出'+price+'金，'+ax.ctrl.lab+'冷哼一聲，記下了這筆債。';ax.ctrl.trust=clamp(ax.ctrl.trust-8,0,100);}}
+   try{INV.add('mdose',{qty:1,force:1,how:ax.ctrl.lab+'所予',who:ax.ctrl.npc});}catch(e){}
+   ax.ctrl.trust=clamp(ax.ctrl.trust+3,0,100);
+   return done('解藥',(t?t+'\n':'')+'你收下了一劑解藥。'+ax.ctrl.lab+'的身影融回夜色，只留下一句：「別忘了你的使命。」\n（解藥 +1，現有 '+Poison.doses()+' 劑）',ax.ctrl.npc);
+  }
+  if(op==='ctrl'){
+   if(ax.ctrl.st!=='ok')return menuScene();
+   var c=[];var tm=p&&p.mission.target;
+   c.push(ch('請求補發解藥'+(byD([0,0,60,140])?'（'+byD([0,0,60,140])+'金）':''),'afl',{op:'req'}));
+   c.push(ch('質問當年之事','afl',{op:'ask'}));
+   c.push(ch('談條件：我要根治之法','afl',{op:'terms'}));
+   c.push(ch('↩ 返回','afl',{op:'menu'}));
+   return scene('【'+ax.ctrl.lab+'】\n你向暗處低聲喚了一聲。片刻，一個影子從屋檐翻下，落地無聲。\n「有事？」他的語氣不帶情緒。（信任 '+ax.ctrl.trust+'）'+(tm&&alive(tm)?'\n「'+nmx(tm)+'還活著。」他提醒你。':''),ax.ctrl.npc||'',{bg:S.p.spot,kind:'talk',ch:c});
+  }
+  if(op==='req'){
+   var pr=byD([0,0,60,140]);
+   if(Poison.doses()>=2)return done('補發','「你手上還有。」'+ax.ctrl.lab+'皺眉，「不要浪費。」',ax.ctrl.npc);
+   if(ax.ctrl.trust<20&&D()>=2){return done('補發','「公主的信任，是要用成果換的。」'+ax.ctrl.lab+'搖頭，「先把事情辦好。」（信任太低——你還可以偷藥、求醫，或向其他人求助。）',ax.ctrl.npc);}
+   if(pr&&st.gold<pr)return done('補發','「錢不夠。」他轉身便走。（需 '+pr+' 金）',ax.ctrl.npc);
+   if(pr)st.gold-=pr;try{INV.add('mdose',{qty:1,force:1,how:ax.ctrl.lab+'補發',who:ax.ctrl.npc});}catch(e){}
+   ax.ctrl.trust=clamp(ax.ctrl.trust-5,0,100);
+   return done('補發','他不情願地拋來一劑解藥：「下不為例。」（解藥 +1）',ax.ctrl.npc);
+  }
+  if(op==='ask'){
+   ax.ctrl.trust=clamp(ax.ctrl.trust-6,0,100);
+   var first=!ax.seen.c2;
+   if(first){ax.seen.c2=1;ax.clues=Math.min(3,ax.clues+1);}
+   var tt=p&&p.falseFoe?nmx(p.falseFoe):'那個人';
+   t=ax.ctrl.lab+'沉默了很久：「公主的馬車是在山道上被截的。刺客身上有一枚相府的令牌——這是我親眼所見。」他頓了頓，「可令牌太乾淨了……乾淨得不像真的。」'+(first?'\n你記下了這條線索。（查明真相 '+ax.clues+'/3）':'\n（他不肯再多說。）');
+   Poison.checkTruth();
+   return done('舊事',t,ax.ctrl.npc);
+  }
+  if(op==='terms'){
+   S.flags.org_terms=S.day;var tm2=p&&p.mission.target;
+   return done('條件',ax.ctrl.lab+'盯著你：「根治之法，公主說過，只有一個條件——'+(tm2?nmx(tm2)+'的人頭':'完成使命')+'。」他轉身，「在那之前，你每個月都要來見我。」\n（想要別的出路：向醫者求解方、向呂不韋坦白、或偷藥。）',ax.ctrl.npc);
+  }
+  if(op==='steal'){
+   var chn=35+st.stealth/2+(D()===0?30:(D()===1?0:(D()===2?-8:-15)));
+   if(roll(chn)){try{INV.add('mdose',{qty:2,force:1,how:'偷自'+ax.ctrl.lab,who:ax.ctrl.npc});}catch(e){}
+    ax.ctrl.trust=clamp(ax.ctrl.trust-10,0,100);fx.days=3;var o=applyFx(fx);
+    return done('偷藥','你循著蛛絲馬跡摸到'+ax.ctrl.lab+'的藏身處，趁他外出，從暗格裡取走兩劑解藥。回頭時，桌上的燈火微微晃了晃——他或許察覺了。（解藥 +2）',ax.ctrl.npc);}
+   ax.ctrl.trust=clamp(ax.ctrl.trust-20,0,100);fx.st.hp=-8;fx.days=3;var o2=applyFx(fx);
+   if(ax.ctrl.trust<=0&&D()>=1){S.flags.org_exposed=S.day;}
+   return done('偷藥','你剛摸到暗格，一枚短鏢「奪」地釘在你耳側。影子立在門口：「再有下次，就不是警告。」'+fxLine(o2),ax.ctrl.npc);
+  }
+  if(op==='buy'){
+   var cost=byD([60,90,140,220]);
+   if(st.gold<cost)return done('緩解湯','藥舖掌櫃搖頭：「一帖要 '+cost+' 金。」你的錢不夠。（還有別的辦法：請醫者研究、向人求助、偷藥。）');
+   st.gold-=cost;try{INV.add('mdose2',{qty:1,force:1,how:'藥舖',who:''});}catch(e){}
+   return done('緩解湯','你花 '+cost+' 金買了一帖緩解湯。掌櫃壓低聲音：「只能壓半期，治標不治本。」（緩解湯 +1）');
+  }
+  if(op==='research'){
+   var cs=[],lines=[];
+   if(alive('xiawuju')){var here=locOf('xiawuju')===S.p.region;cs.push(ch('請夏無且診治（120金）'+(here?'':'（他在'+regionName(locOf('xiawuju'))+'，需先前往）'),'afl',{op:'resDo',who:'xiawuju'}));}
+   cs.push(ch('請民間郎中研究（80金）','afl',{op:'resDo',who:'doctor'}));
+   if(S.p.path==='physician'||(p&&p.skills.indexOf('medic')>=0))cs.push(ch('自己閉門鑽研（10日）','afl',{op:'resDo',who:'self'}));
+   cs.push(ch('↩ 返回','afl',{op:'menu'}));
+   return scene('【解方】\n你攤開手掌，那圈青黑的血脈像蛛網爬向掌心。要擺脫它，只能找出毒的配方，一點一點拆解。（目前進度 '+ax.res+'%）',alive('xiawuju')?'xiawuju':'',{bg:'pharm',kind:'talk',ch:cs});
+  }
+  if(op==='resDo'){
+   var w=a.who,gain=0,cost2=0;
+   if(w==='xiawuju'){cost2=120;if(locOf('xiawuju')!==S.p.region)return done('研究','夏無且此刻不在這裡。你得先前往'+regionName(locOf('xiawuju'))+'。');gain=14+Math.floor(st.zhi/10);}
+   else if(w==='doctor'){cost2=80;gain=7;}
+   else {gain=6+Math.floor(st.zhi/15);cost2=0;fx.days=10;}
+   if(st.gold<cost2)return done('研究','你的錢不夠（需要 '+cost2+' 金）。');
+   if(cost2)fx.st.gold=-cost2;if(!fx.days)fx.days=4;
+   ax.res=Math.min(100,ax.res+gain);var o3=applyFx(fx);
+   if(w==='xiawuju'){R('xiawuju').tr=clamp(R('xiawuju').tr+3,0,100);}
+   t=(w==='xiawuju'?'夏無且取了你一滴血，在燈下比對了整整一夜：「毒方用了三種蛇毒、一種蠱草……解法有了輪廓。」':(w==='doctor'?'郎中搖頭又點頭，開了一張方子：「能不能行，要試過才知道。」':'你把自己關在屋裡，拿解藥與草藥反覆比對，一點一點拆解它的配方。'))+'\n（解毒研究 +'+gain+'%，共 '+ax.res+'%）'+fxLine(o3);
+   if(ax.res>=100)t+='\n\n你終於摸清了解藥的全部配方——現在，可以配製根治之藥了。';
+   return done('研究',t,w==='xiawuju'?'xiawuju':'');
+  }
+  if(op==='curebrew'){
+   if(ax.res<100)return menuScene();
+   Poison.cure('研究出根治方');
+   return resultScene('根治','你按著那張反覆推演過無數次的方子，一味一味配齊、煎熬。藥汁入喉的那一刻，體內糾纏多時的灼痛像潮水般退去。\n你長長吐出一口氣——從今往後，不必再算日子了。\n\n〔體內之'+ax.name+'已根治〕','',S.p.spot,[ch('繼續','hub')]);
+  }
+  if(op==='truth')return truthMenu();
+  if(op==='truthDo')return truthDo(a);
+  if(op==='expose')return expose();
+  if(op==='lbw')return lbwMenu();
+  if(op==='lbwDo')return lbwDo(a);
+  if(op==='peace')return peace();
+  if(op==='defect')return scene('【決裂】\n你真的要與'+ax.ctrl.lab+'決裂嗎？解藥的來源將就此斷絕；公主一方的人也不會放過你——但你不再是任何人的刀。',ax.ctrl.npc||'',{bg:S.p.spot,kind:'menu',ch:[ch('決裂','afl',{op:'defectDo'}),ch('再想想','afl',{op:'menu'})]});
+  if(op==='defectDo'){
+   ax.ctrl.st='cut';S.flags.org_defect=S.day;qpush(12+rnd(10),'aflHunt',{});
+   var lb=alive('lbw');
+   return done('決裂','你對著空蕩蕩的屋子說：「回去告訴公主，我不做她的刀了。」\n黑暗裡沒有回答，但你知道他聽見了。從此，你再也不會有人按時送藥——你得自己找出路。'+(lb?'\n（也許，是時候向呂不韋坦白了。）':''),ax.ctrl.npc);
+  }
+  if(op==='huntBack'){ax.ctrl.st='ok';ax.ctrl.trust=10;S.flags.org_defect=0;S.p.st.rep=clamp(S.p.st.rep-3,0,100);qpush(Math.max(2,ax.period-supplyLead()),'aflSupply',{});return done('歸隊','你低下頭。「很好。」他拋來一劑解藥，「這是最後一次機會。」（信任降至 10）',ax.ctrl.npc);}
+  if(op==='huntFight'){var win=roll(35+st.wu/2+(D()===0?30:0));if(win){fx.st.hp=-6;fx.st.wu=1;S.flags.org_hunt_won=1;var o4=applyFx(fx);return done('交手','兩人在暗巷中交手十數招，你拼著肩頭挨了一刀，扭住了他的手腕。影子沉默許久，鬆開了刀：「……算你狠。」他轉身消失在夜色裡。'+fxLine(o4),ax.ctrl.npc);}
+   fx.st.hp=-14;var o5=applyFx(fx);qpush(18+rnd(10),'aflHunt',{});return done('交手','你不是他的對手。刀光一閃，肩頭劇痛，你倒在地上。他沒有下殺手，只是俯身在你耳邊：「十八天。想清楚。」'+fxLine(o5),ax.ctrl.npc);}
+  if(op==='huntTalk'){var okT=roll(30+st.zhi/2+(ax.clues*10)+(D()===0?25:0));if(okT){S.flags.org_hunt_talked=1;ax.clues=Math.min(3,ax.clues+1);Poison.checkTruth();return done('說服','「那枚令牌太乾淨了。」你把話挑明，「你自己也看出來了，對不對？」影子沉默了很久：「……給我時間。」他沒有動手，轉身走入暗處。\n（他暫時不再追殺你。）',ax.ctrl.npc);}
+   qpush(14+rnd(8),'aflHunt',{});return done('說服','「公主不聽理由。」他一步逼近，「十四天。」',ax.ctrl.npc);}
+  if(op==='exploitPay'){var fee2=Math.min(a.fee,st.gold);st.gold-=fee2;addRel(a.k,'su',-3,null);return done('封口','你付了 '+fee2+' 金。'+nmx(a.k)+'滿意地笑了：「放心，我的嘴很嚴。」',a.k);}
+  if(op==='exploitNo'){addRel(a.k,'su',8,null);addRel(a.k,'ha',3,null);var f0=A().fitFid?Facts.get(A().fitFid):null;if(f0&&f0.vis<1){f0.vis=1;}return done('拒絕',nmx(a.k)+'臉色一沉：「好，你別後悔。」從此，你病發的事開始在背地裡流傳。',a.k);}
+  if(op==='exploitThreat'){var okx=roll(35+st.stealth/3+st.wu/5+(D()===0?30:0));if(okx){addRel(a.k,'fe',10,null);addRel(a.k,'su',-4,null);return done('反制','你貼近他耳邊低語：「你收過誰的錢，我也知道幾件。」'+nmx(a.k)+'臉色刷白，連連點頭。',a.k);}
+   addRel(a.k,'ha',8,null);return done('反制','你虛張聲勢，卻被他一眼看穿。他冷笑著離開，眼神變得很危險。',a.k);}
+  if(op==='rescue')return Poison.rescueDo(a);
+  return menuScene();
+ };
+ /* ---------- 追查舊事 ---------- */
+ function culpritPick(){
+  var cand=['huayang','zhoushan','zhaoquan','qishi'].filter(function(id){return NPC[id]&&alive(id)&&id!==(P()&&P().mission.target);});
+  if(!cand.length)cand=['zhaoquan'];
+  return cand[Math.abs((S.seed|0)%cand.length)];
+ }
+ function truthMenu(){
+  var a=A(),p=P();
+  var c=[];
+  if(!a.seen.c1)c.push(ch('向呂不韋旁敲側擊當年之事','afl',{op:'truthDo',w:'c1'}));
+  if(!a.seen.c3)c.push(ch('夜探舊宅，查當年的舊檔','afl',{op:'truthDo',w:'c3'}));
+  if(!a.seen.c2&&a.ctrl.st==='ok')c.push(ch('套'+a.ctrl.lab+'的話','afl',{op:'ask'}));
+  c.push(ch('↩ 返回','afl',{op:'menu'}));
+  return scene('【追查舊事】\n公主的馬車在山道被劫，刺客留下了相府令牌，她從此恨透了呂不韋。可令牌太乾淨了。誰有能力、有動機、又不怕事情查到相府身上？\n（已查明 '+a.clues+'/3 條線索）'+(a.clues>=3?'\n你已經掌握了足夠的線索。':''),'',{bg:'study',kind:'menu',ch:c});
+ }
+ function truthDo(x){
+  var a=A(),st=S.p.st,fx={st:{},days:3},t='';
+  if(x.w==='c1'){
+   if(!alive('lbw'))return done('舊事','呂不韋已不在人世。');
+   if(!R('lbw').met)return done('舊事','你與呂不韋素不相識，貿然提起陳年舊事只會惹疑。先設法結識他。');
+   if(a.seen.c1)return truthMenu();
+   var okc=roll(35+st.zhi/3+R('lbw').tr/4+(D()===0?30:0));
+   if(okc){a.seen.c1=1;a.clues=Math.min(3,a.clues+1);t='你裝作隨口閒聊，問起「十幾年前齊國公主的事」。呂不韋的筷子在半空頓了頓。他沉默良久：「那年我的人被人截了信，信裡的字，不是我寫的。」他看你一眼，「你問這個做什麼？」\n你知道，他是被冤枉的。（查明真相 '+a.clues+'/3）';addRel('lbw','su',3,null);}
+   else {t='你旁敲側擊，呂不韋卻只是笑：「年輕人，打聽相府舊事，可不是好習慣。」你什麼也沒問到，反讓他多看了你兩眼。';addRel('lbw','su',6,null);}
+  }else if(x.w==='c3'){
+   if(a.seen.c3)return truthMenu();
+   var oks=roll(30+st.stealth/2+(D()===0?30:(D()===3?-10:0)));
+   if(oks){a.seen.c3=1;a.clues=Math.min(3,a.clues+1);t='你趁夜潛入城西舊宅，翻出一捲塵封的竹簡：當年那批令牌，是從一間不屬於相府的工坊領出的。領牌人的花押，你記下了。（查明真相 '+a.clues+'/3）';fx.st.stealth=1;}
+   else {t='你剛翻開竹簡，窗外忽然亮起火把。你狼狽翻牆逃走，什麼也沒帶出來。';fx.st.hp=-6;S.p.wanted=clamp(S.p.wanted+4,0,100);}
+  }
+  var o=applyFx(fx);Poison.checkTruth();
+  return done('追查',t+fxLine(o)+(a.clues>=3&&a.culprit?'\n\n三條線索串在一起了——你終於知道，當年設局的人是'+nmx(a.culprit)+'。':''));
+ }
+ Poison.checkTruth=function(){
+  var a=A();if(!a||a.clues<3||a.culprit)return;
+  a.culprit=culpritPick();S.flags.org_truth_found=S.day;
+  try{if(window.Facts){var r=Facts.ingest([{type:'secret',subject:a.culprit,object:'',kin:'other',text:nmx(a.culprit)+'才是當年設局陷害'+(P()&&P().falseFoe?nmx(P().falseFoe):'他人')+'、挑起這場恩怨的人',vis:'secret',knownBy:['p'],proof:'weak',mag:2}],{src:'origin',force:1});if(r.items.length)a.truthFid=r.items[0].f.i;}}catch(e){}
+  try{addLog('【真相】你查出，當年設局的人是'+nmx(a.culprit)+'。');}catch(e){}
+ };
+ function expose(){
+  var a=A();if(!a.culprit)return menuScene();
+  var K=a.culprit;S.flags.org_truth_done=S.day;
+  try{questState('org_truth','done');}catch(e){}
+  if(alive(K)){addRel(K,'ha',18,null);addRel(K,'su',15,null);addMem(K,S.p.name+'揭了我當年的底。');}
+  S.p.st.rep=clamp(S.p.st.rep+4,0,100);
+  try{addNews(nmx(K)+'當年設局陷害的舊事被人揭開，朝野譁然。');}catch(e){}
+  return resultScene('真相大白','你把證據與證詞一件件攤在眾人面前。'+nmx(K)+'的臉色由紅轉白，再也說不出一句辯解。\n被冤枉了十六年的人，終於可以不再背著這個名字。\n\n〔聲望 +4〕','',S.p.spot,[ch('繼續','hub')]);
+ }
+ /* ---------- 向呂不韋坦白 ---------- */
+ function lbwMenu(){
+  var a=A();if(!alive('lbw'))return done('坦白','呂不韋已不在人世。');
+  if(locOf('lbw')!==S.p.region)return done('坦白','呂不韋此刻在'+regionName(locOf('lbw'))+'，你得先去見他。');
+  if(!R('lbw').met){R('lbw').met=1;}
+  var c=[ch('只說自己中了毒，求他相助','afl',{op:'lbwDo',w:'poison'})];
+  if(P()&&P().mission.target==='lbw'){c.push(ch('全盤托出：身世、使命、被陷害的真相','afl',{op:'lbwDo',w:'full'}));}
+  else c.push(ch('說出自己的身世','afl',{op:'lbwDo',w:'full'}));
+  c.push(ch('↩ 返回','afl',{op:'menu'}));
+  return scene('【坦白】\n呂不韋放下手中的竹簡，目光像稱量貨物一樣落在你身上。\n「說吧。」他的聲音聽不出情緒。',"lbw",{bg:'study',kind:'talk',ch:c});
+ }
+ function lbwDo(x){
+  var a=A(),st=S.p.st,r=R('lbw'),p=P(),fx={st:{},days:2},t='';
+  var proof=Math.min(30,(INV.count('keepsake')+INV.count('jadepend'))*12);
+  var pf=p&&p.fids&&p.fids.afflict?Facts.get(p.fids.afflict):null,mf=p&&p.fids&&p.fids.mission?Facts.get(p.fids.mission):null,bf=p&&p.fids&&p.fids.blood?Facts.get(p.fids.blood):null;
+  if(x.w==='poison'){
+   if(pf)Facts.learn('lbw',pf,'p',92,true);
+   var ok=roll(35+r.tr*0.5+r.af*0.3-r.su*0.4+byD([35,0,-8,-15]));
+   if(ok){a.res=Math.min(100,a.res+25);S.flags.org_lbw_med=S.day;addRel('lbw','tr',6,null);addRel('lbw','af',5,null);t='你卷起袖子，露出手臂上蛛網般的青黑血脈。呂不韋盯著它看了很久：「這是三種蛇毒加一味蠱草。有人要你死，也有人要你活得很聽話。」他吩咐道：「把醫官叫來。」\n（解毒研究 +25%，呂不韋記下了你的事）';}
+   else {addRel('lbw','su',8,null);t='呂不韋聽完，淡淡一笑：「中了毒？那就去找醫者，何必來找老夫。」但他看你的眼神，多了一層審視。';}
+   var o=applyFx(fx);return done('坦白',t+fxLine(o),'lbw');
+  }
+  /* full */
+  if(pf)Facts.learn('lbw',pf,'p',95,true);if(mf)Facts.learn('lbw',mf,'p',95,true);
+  var chn=25+r.tr*0.5+r.af*0.3-r.su*0.5+proof+byD([35,0,-8,-15]);
+  if(roll(chn)){
+   S.flags.org_ack=S.day;if(bf){bf.ack=1;Facts.learn('lbw',bf,'p',96,true);}
+   addRel('lbw','tr',15,null);addRel('lbw','af',22,null);addRel('lbw','su',-10,null);a.res=Math.min(100,a.res+40);S.flags.org_lbw_med=S.day;
+   if(mf)mf.vis=Math.max(mf.vis,0);
+   t='你把一切都說了：母親的名字、墜崖的雨夜、公主下的毒、要你做的事，還有那個令牌。\n呂不韋一動不動地坐著，像一尊石像。很久很久，他的手指才輕輕抖了一下。\n「……她還活著。」他低聲說，「十六年。」\n他起身，走到你面前，沒有擁抱你，只是替你理了理衣領，像個笨拙的父親。「從今天起，你不是誰的刀。」\n（呂不韋承認了你；解毒研究 +40%）';
+   var o2=applyFx(fx);
+   return done('相認',t+fxLine(o2),'lbw',[ch('與他聯手，反過來利用公主的組織','afl',{op:'lbwDo',w:'double'})]);
+  }
+  addRel('lbw','su',20,null);S.p.wanted=clamp(S.p.wanted+6,0,100);fx.st.hp=-4;fx.days=8;
+  var o3=applyFx(fx);
+  return done('坦白','你說到一半，呂不韋猛地站起身。「你是來殺我的。」他的聲音很輕。門外的衛士立刻湧了進來。\n你被軟禁了八天。他沒有殺你，也沒有信你——只說了一句：「我會查。」'+fxLine(o3),'lbw');
+ }
+ function peace(){
+  var a=A(),r=R('lbw');
+  var chn=35+r.tr/3+(S.flags.org_ack?25:0)+(a.truthFid?10:0)+byD([30,0,-6,-12]);
+  if(!roll(chn)){a.cd.peace=S.day;return done('和解','你轉述了真相，可信使回報：公主不肯見。「十六年的恨，不是一句話就能化解的。」\n（提高呂不韋的信任、拿出更多證據後，可再試。）');}
+  S.flags.org_peace=S.day;
+  return resultScene('破鏡重圓','山道旁的驛亭裡，一個戴著斗笠的女子遲遲沒有摘下斗笠。呂不韋站在三步之外，一步也不敢靠近。\n「我沒有殺你。」他說。\n良久，她輕輕地說：「……我知道了。」\n那個雨夜之後，過了十六年，兩個人才終於面對面地說了一句真話。\n\n〔你促成了一場遲到十六年的重逢〕','',S.p.spot,[ch('繼續','hub')]);
+ }
+ /* ---------- 瀕危與獲救（保證有救）---------- */
+ Poison.rescueScene=function(){
+  var a=A();var c=[];
+  var t='【意識沉入黑暗】\n你已經記不清自己的名字。街上的人指指點點，有人遞來一碗水，你卻只會傻笑，口涎沿著下巴滴落。\n然而，在最後一點清明消散之前，你聽見了遠處有人在喊你的名字。';
+  if(a.ctrl.st==='ok'&&alive(a.ctrl.npc||'ying'))c.push(ch('影先生循蹤趕來','afl',{op:'rescue',w:'ctrl'}));
+  if(alive('xiawuju'))c.push(ch('夏無且聞訊趕來','afl',{op:'rescue',w:'xiawuju'}));
+  if(alive('lbw')&&R('lbw').met)c.push(ch('呂不韋的人把你抬回相府','afl',{op:'rescue',w:'lbw'}));
+  c.push(ch('一位路過的老郎中停下腳步','afl',{op:'rescue',w:'doctor'}));
+  c.push(ch('放任自己沉下去……','afl',{op:'rescue',w:'sink'}));
+  return scene(t,'',{bg:S.p.spot,kind:'event',tag:'瀕危',ch:c});
+ };
+ Poison.rescueDo=function(x){
+  var a=A(),w=x.w,st=S.p.st,fx={st:{},days:3},t='',cost=byD([0,0,60,140]);
+  if(w==='sink'){
+   return scene('【沉入黑暗】\n你鬆開了抓著最後一點意識的手。世界安靜了下來。\n也許，這樣也好。\n\n（這並不是終點——只要有人願意救你，神智仍可恢復。）','',{bg:'wild',kind:'event',ch:[ch('就這樣結束……','afl',{op:'sinkEnd'}),ch('不，我還不想放棄！','afl',{op:'rescue',w:'doctor'})]});
+  }
+  if(w==='ctrl'){a.ctrl.trust=clamp(a.ctrl.trust-10,0,100);t=a.ctrl.lab+'一腳踹開門，把解藥灌進你嘴裡。「你還不能死。」他冷聲道。'+(cost?'他拿走了你 '+Math.min(cost,st.gold)+' 金。':'');try{INV.add('mdose',{qty:1,force:1,how:'急救',who:a.ctrl.npc});}catch(e){}}
+  else if(w==='xiawuju'){a.res=Math.min(100,a.res+12);t='夏無且以針灸護住你的心脈，又灌下一碗湯。「你這個傻瓜，」他壓低聲音，「再晚一天，我也救不回來。」';try{INV.add('mdose2',{qty:1,force:1,how:'夏無且',who:'xiawuju'});}catch(e){}}
+  else if(w==='lbw'){a.res=Math.min(100,a.res+10);t='呂不韋的醫官連夜施救。次日醒來，你看見他坐在床邊，不知看了你多久。「你這條命，」他說，「我還要問個清楚。」';addRel('lbw','su',5,null);try{INV.add('mdose2',{qty:1,force:1,how:'相府醫官',who:'lbw'});}catch(e){}}
+  else {t='老郎中蹲下身，翻了翻你的眼皮，從藥囊裡摸出一包草藥：「又是這種毒……真是造孽。」他煎了藥，一勺一勺餵你。'+(cost?'他只收走了你 '+Math.min(cost,st.gold)+' 金的藥錢。':'');try{INV.add('mdose2',{qty:1,force:1,how:'老郎中',who:''});}catch(e){}}
+  if(cost)fx.st.gold=-Math.min(cost,st.gold);
+  a.rescues++;a.stage=2;a.next=S.day+10;a.rescueAt=0;S.flags.org_rescued=S.day;
+  var o=applyFx(fx);
+  var tk=Poison.take('lite');
+  return resultScene('獲救',t+'\n\n'+tk+fxLine(o)+'\n神智一點一點回到了腦子裡。你知道，你欠了一條命。','',S.p.spot,[ch('💊 體內之毒','afl',{op:'menu'}),ch('繼續','hub')]);
+ };
+ var _afl=NODES.afl;
+ NODES.afl=function(a){if(a&&a.op==='sinkEnd'){S.flags.org_fool_end=S.day;return endingScene('org_fool');}return _afl(a);};
+ /* ---------- 結局 ---------- */
+ ENDINGS.org_fool={n:'癡兒',t:'毒終於吞掉了最後一點神智。\n你坐在街邊曬太陽，對每個路過的人傻笑。有人說，這孩子眉眼像極了某位故人；有人說，他袖口裡還藏著半包沒喝完的藥。\n故事沒有結束——只要有人肯給你一劑解藥、一個根治的方子，你還是可以醒來。（可選擇「繼續遊玩」，神智仍可救回。）'};
+ ENDINGS.org_assassin={n:'血債血償',t:'你終於完成了使命。\n呂不韋倒下的時候，嘴角竟帶著一絲說不清的笑意。你以為自己會痛快，卻只覺得胸口像被掏空了一塊。\n公主派人送來了根治之藥，說：「做得好。」\n你捏著那只小瓶，站在雨裡，很久很久。——有些真相，你或許永遠不會知道了。'};
+ ENDINGS.org_reunion={n:'父女相認',t:'呂不韋沒有再叫你「那孩子」。\n他親自替你取了名字，寫入族譜。相府的人都以為是遠房的晚輩，唯有他知道，這世上還有一個人，和那位墜崖的公主有著同樣的眉眼。\n你終於有了一個可以回的家。'};
+ ENDINGS.org_truth={n:'沉冤昭雪',t:'十六年前那個雨夜，終於有了答案。\n真相攤開的那一刻，沒有人歡呼。呂不韋站在階下，頭一次露出疲態：「原來我一直在為不是我犯的罪名，被人恨著。」\n你把名字寫回了那一段被篡改的過去。'};
+ ENDINGS.org_peace={n:'破鏡重圓',t:'驛亭裡的那場重逢之後，山間多了一戶人家。\n她不再提過去，他也從不問。你偶爾回去看看，發現桌上總擺著三副碗筷。\n恩怨十六年，終於有一頓團圓飯。'};
+ ENDINGS.org_double={n:'雙面棋子',t:'公主的人以為你還是一把刀。呂不韋知道你是他的女兒（兒子）。\n你在兩邊的棋盤上落子：一邊餵給假情報，一邊替真相鋪路。等所有人回過神時，棋局早已換了執棋人。\n從此，沒有人再能操縱你。'};
+ var _ce=checkEnding;
+ checkEnding=function(){
+  var r=_ce();if(r)return r;
+  try{var k=Poison.endingCheck();if(k)return endingScene(k);}catch(e){if(window.console)console.error('org ending',e);}
+  return null;
+ };
+ Poison.endingCheck=function(){
+  if(!S||!S.x||!S.x.originProfile||!S.x.originProfile.rich)return null;
+  var E=S.endings,p=S.x.originProfile,pass=function(x){return E.indexOf(x)<0&&S.ending!==x;};
+  var a=A();
+  var tg=p.mission.target;
+  if(p.mission.type==='assassinate'&&tg&&S.flags['killed_by_p_'+tg]&&pass('org_assassin')){if(a&&a.on&&!a.cured)Poison.cure('完成使命後換得根治之藥');return 'org_assassin';}
+  if(S.flags.org_peace&&pass('org_peace'))return 'org_peace';
+  if(S.flags.org_double&&S.day>=S.flags.org_double_at&&pass('org_double'))return 'org_double';
+  if(S.flags.org_truth_done&&pass('org_truth')&&S.day-S.flags.org_truth_done>=2)return 'org_truth';
+  var bf=p.fids&&p.fids.blood?Facts.get(p.fids.blood):null;
+  if(bf&&bf.ack&&alive('lbw')&&S.flags.org_ack&&S.day-S.flags.org_ack>=20&&pass('org_reunion'))return 'org_reunion';
+  return null;
+ };
+ /* 雙面棋子：聯手反制 */
+ var _afl2=NODES.afl;
+ NODES.afl=function(a){
+  if(a&&a.op==='lbwDo'&&a.w==='double'){S.flags.org_double=S.day;S.flags.org_double_at=S.day+30;
+   return resultScene('聯手','呂不韋聽完你的計畫，緩緩笑了：「商人最擅長的，就是讓別人以為自己在賺錢。」\n你們約定：你繼續向影先生報告，只是報的全是他想聽的；而相府的人，會順著那條線摸回公主的組織。\n（一個月後，棋局將見分曉。）','lbw',S.p.spot,[ch('繼續','hub')]);}
+  return _afl2(a);
+ };
+ /* ---------- 物品使用 ---------- */
+ var _ue=INV.useEntry;
+ INV.useEntry=function(e){
+  var K=INV.kind(e.k);
+  if(K&&(K.u==='afflict'||K.u==='afflict2')){
+   if(!on())return resultScene('物品',K.n+'：你身上並沒有需要它壓制的毒。','',S.p.spot,[ch('返回','bag')]);
+   var t=Poison.take(K.u==='afflict2'?'lite':'full');INV.consume(e,1);
+   return resultScene('服藥',t,'',S.p.spot,[ch('🎒 背包','bag'),ch('繼續','hub')]);
+  }
+  return _ue(e);
+ };
+ /* ---------- UI ---------- */
+ QHUB.push({cond:function(){return !!A()&&(!A().cured||false);},t:function(){return '💊 體內之毒·'+Poison.line();},go:'afl',a:{op:'menu'},g:'身世'});
+ var _ps=PANELS.stats;
+ PANELS.stats=function(){var h=_ps();try{if(A())h+=Poison.panelHTML();}catch(e){}return h;};
+ var _hu=HUD.update;
+ HUD.update=function(){_hu();try{var a=A();var lv=document.getElementById('hudlv');if(a&&on()&&lv&&S){lv.textContent=lv.textContent.replace(/\s·\s💊.*$/,'')+' · 💊'+Poison.line().replace('下次服藥：','');}}catch(e){}};
+ /* 結局圖鑑：由 ENDINGS 自動列出 */
+ /* ---------- 測試用 ---------- */
+ Poison.force=function(sym){var a=A();if(a)a.forceFit=sym||'blood';};
+})();
+
+/* ---- 64_gender.js ---- */
+/* ===== 65_gender.js：易裝期間「旁人眼中的性別」稱呼、知情機制、識破判定 =====
+ * 旁人視角（NPC 稱呼／對白模板／敘述／AI 提示／官府處置）：pgOf()（易裝且未識破→假性別；其餘→真性別）
+ * 玩家自知（內心、角色卡「女扮男裝」、愛情宮廷身份限制判定的真實性別）：S.p.gender
+ * 知情者：Facts 秘辛「玩家真實性別」（knownBy：玩家＋同謀／被告知者）；知情者私下才會用真實性別稱呼。 */
+(function(){
+var Gender=window.Gender={stat:{fix:0}};
+function disguised(){return !!(S&&S.p&&S.p.disg&&!(S.flags&&S.flags.disg_exposed));}
+Gender.disguised=disguised;
+function realLab(){return S.p.gender==='f'?'女':'男';}
+function seenLab(){return pgOf()==='f'?'女':'男';}
+Gender.fact=function(){
+ if(!disguised()||!window.Facts||!S.x)return null;
+ var f=S.x.gfid?Facts.get(S.x.gfid):null;
+ if(f)return f;
+ try{
+  var res=Facts.ingest([{type:'secret',subject:'p',object:'',kin:'other',text:S.p.name+'其實是'+(S.p.gender==='f'?'女子':'男子')+'，正扮作'+(S.p.pg==='f'?'女子':'男子')+'行走（'+(S.p.gender==='f'?'女扮男裝':'男扮女裝')+'）',vis:'secret',knownBy:['p'],proof:'none',mag:2}],{src:'gender',force:1});
+  if(res.items.length){f=res.items[0].f;S.x.gfid=f.i;return f;}
+ }catch(e){if(window.console)console.error('gender fact',e);}
+ return null;
+};
+Gender.knows=function(id){
+ if(!S||!S.p)return false;
+ if(!disguised())return true;
+ if(!id||!NPC[id])return false;
+ if(S.flags.disg_ally===id)return true;
+ var f=Gender.fact();
+ return !!(f&&Facts.knows(id,f));
+};
+Gender.knowers=function(){
+ var f=Gender.fact();var out=[];
+ if(f){for(var k in f.kn){if(k!=='p'&&NPC[k]&&alive(k))out.push(k);}}
+ if(typeof S.flags.disg_ally==='string'&&NPC[S.flags.disg_ally]&&out.indexOf(S.flags.disg_ally)<0&&alive(S.flags.disg_ally))out.push(S.flags.disg_ally);
+ return out;
+};
+/* 某人（或公開場合 id 為空）眼中的玩家性別 */
+Gender.viewFor=function(id){
+ if(!S||!S.p)return 'm';
+ if(!disguised())return S.p.gender||'m';
+ if(id&&Gender.knows(id))return S.p.gender;
+ return pgOf();
+};
+Gender.tell=function(id,b){
+ if(!disguised()||!id||!NPC[id])return;
+ var f=Gender.fact();if(f)try{Facts.learn(id,f,'p',b||95,true);}catch(e){}
+};
+Gender.expose=function(){
+ if(!S||!S.p)return;
+ S.p.pg=S.p.gender;
+ var f=S.x&&S.x.gfid?Facts.get(S.x.gfid):null;
+ if(f){f.vis=2;f.pub=1;}
+};
+Gender.aiRule=function(){
+ Gender.ensure();
+ var real=realLab(),t='';
+ if(disguised()){
+  var seen=seenLab();var kn=Gender.knowers().map(nm);
+  t='【性別稱呼規則】玩家真實為'+real+'性，正'+(S.p.gender==='f'?'女扮男裝':'男扮女裝')+'，旁人眼中是'+seen+'子。所有旁人（含敘述者的旁人視角）一律稱呼玩家為「'+(seen==='女'?'姑娘／她':'公子／他')+'」，絕不可使用「'+(seen==='女'?'公子／他':'姑娘、小姐、女子、她、女兒家')+'」等真實性別稱呼，也不可暗示識破。'+(kn.length?'目前知道真相者：'+kn.join('、')+'，只有他們私下可流露知情並使用真實性別稱呼。':'目前沒有任何人知道真相。')+'身分被識破（劇情中確實發生）後，才改稱真實性別。';
+ }else if(S.flags.disg_exposed){
+  t='【性別稱呼】玩家易裝身分已被識破（第'+S.flags.disg_exposed+'日），旁人現已改稱其真實性別（'+real+'）。';
+ }
+ return t;
+};
+Gender.ensure=function(){try{if(disguised())Gender.fact();}catch(e){}};
+/* ---------- 開局／讀檔 ---------- */
+var _sg=startGame;
+startGame=function(cfg){var r=_sg(cfg);try{Gender.ensure();}catch(e){}return r;};
+/* ---------- 識破判定：只有高疑心／親近且觀察力高者可能識破 ---------- */
+function insight(id){var n=NPC[id];return n.zh*0.6+n.sus*0.4;}
+Gender.observers=function(){
+ return candNpcs(function(id,n){
+  if(locOf(id)!==S.p.region||!adultOK(id)||n.tier>3||id==='yingzheng')return false;
+  var r=S.rel[id];if(!r||!r.met)return false;
+  if(Gender.knows(id))return false;
+  return insight(id)>=55&&(r.su>=30||(r.af+r.tr)>=60);
+ });
+};
+Gender.score=function(id){var r=R(id);return insight(id)*0.5+r.su*0.6+Math.min(60,(r.af+r.tr)*0.25)-S.p.st.stealth*0.2;};
+disgMonth=function(){
+ if(!disguised())return;
+ var obs=Gender.observers();if(!obs.length)return;
+ var p=S.p;var base=2.2;
+ if(inPalace())base+=2.5;if(p.path==='physician')base+=3;if(S.p.spot==='gate'&&p.path==='soldier')base+=1.5;
+ base-=p.st.stealth*0.03;
+ var best=obs[0],bs=-1;obs.forEach(function(id){var s=Gender.score(id);if(s>bs){bs=s;best=id;}});
+ var f=Math.max(0.5,Math.min(3,bs/55));
+ if(roll(Math.max(0.6,base)*f*(SET.diff==='easy'?0.4:SET.diff==='hell'?1.6:1))){S.flags.disg_wit=best;S.pending.push(disgExposeScene(best));}
+};
+disgExposeScene=function(wid){
+ if(!wid){var o=Gender.observers();wid=o.length?o[0]:'';}
+ S.flags.disg_wit=wid;
+ var sx=S.p.gender==='f'?'女':'男';
+ var r=wid?R(wid):null;
+ var lead=!wid?'一名陌生人盯著你看了很久':(r.af+r.tr>=70?nm(wid)+'把你拉到無人處，壓低聲音，眼裡有擔憂也有試探':(r.su>=45?nm(wid)+'目光像刀子一樣在你臉上刮過，一字一頓':nm(wid)+'盯著你看了很久，目光忽然一凝'));
+ return scene('【身分敗露？】\n'+lead+'：「你……是'+sx+'子，對不對？」\n你扮作'+(S.p.pg==='m'?'男':'女')+'子行走，此刻額角滲出冷汗。',wid,{bg:S.p.spot,kind:'event',tag:'易裝',
+  ch:[ch('矢口否認，堅持原狀','disgReact',{k:'deny'}),ch('給點好處，請對方封口（約80金）','disgReact',{k:'bribe'}),ch('坦白，並請對方成為同謀','disgReact',{k:'confess'}),ch('反過來拿對方的把柄','disgReact',{k:'counter'}),ch('立刻抽身，換個地方','disgReact',{k:'flee'})]});
+};
+/* 反應節點：成功說服 → 對方成為知情者；識破 → 公開 */
+var _dr=NODES.disgReact;
+NODES.disgReact=function(a){
+ var was=disguised();var ally0=S.flags.disg_ally;
+ var sc=_dr(a);
+ try{
+  if(was){
+   if(S.flags.disg_exposed){Gender.expose();}
+   else if(S.flags.disg_ally&&S.flags.disg_ally!==ally0&&typeof S.flags.disg_ally==='string'){Gender.tell(S.flags.disg_ally,95);}
+   else if(a&&a.k==='bribe'&&S.flags.disg_wit&&!S.flags.disg_exposed){/* 收下謝禮者已知情，只是答應保密 */Gender.tell(S.flags.disg_wit,80);}
+   else if(a&&a.k==='counter'&&S.flags.disg_wit&&S.flags['blackmail_'+S.flags.disg_wit]){Gender.tell(S.flags.disg_wit,80);}
+  }
+ }catch(e){if(window.console)console.error('gender react',e);}
+ return sc;
+};
+var _dd=NODES.disgDrop;
+NODES.disgDrop=function(a){var sc=_dd(a);try{Gender.expose();}catch(e){}return sc;};
+/* ---------- AI 回覆後檢查：稱呼洩密 ---------- */
+var FEM=/姑娘|小姐|女兒家|女兒身|女娃|女郎|丫頭/;
+Gender.fixText=function(t,sp){
+ if(!disguised()||!t)return t;
+ if(Gender.knows(sp))return t;
+ var m=npcsMentioned(t);
+ var hasWoman=m.some(function(id){return NPC[id].sex==='f'&&id!==sp;});
+ if(hasWoman)return t;
+ if(Gender.knowers().some(function(k){return m.indexOf(k)>=0;}))return t;
+ var out=t,seenF=pgOf()==='f';
+ if(!seenF){
+  var nmx=S.p.name.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+  out=out.replace(/姑娘|小姐/g,'公子').replace(/女兒家/g,'讀書人').replace(/(你[^，。！？「」]{0,3})女子/g,'$1男子').replace(new RegExp('('+nmx+'[^，。！？「」]{0,3})她','g'),'$1他').replace(/女扮男裝/g,'易裝');
+ }else{
+  out=out.replace(/公子/g,'姑娘').replace(/(你[^，。！？「」]{0,3})男子/g,'$1女子').replace(/男扮女裝/g,'易裝');
+ }
+ if(out!==t)Gender.stat.fix++;
+ return out;
+};
+function npcsMentioned(t){var o=[];for(var i=0;i<NPCS.length;i++){var n=NPCS[i];if(n&&n.n&&n.n.length>=2&&t.indexOf(n.n)>=0&&o.indexOf(n.id)<0)o.push(n.id);}return o;}
+var _sum=AI.summary;
+AI.summary=function(){
+ var t=_sum();
+ try{if(disguised()){var a='（'+realLab()+'，'+S.p.age+'歲）';t=t.replace('【玩家】'+S.p.name+'（'+realLab()+'，','【玩家】'+S.p.name+'（真實'+realLab()+'性、旁人眼中'+seenLab()+'子，旁人一律以'+seenLab()+'子稱呼，');}}catch(e){}
+ return t;
+};
+var _run=AI.run;
+AI.run=function(a){
+ var p=_run(a);
+ if(!disguised())return p;
+ return p.then(function(sc){
+  try{if(sc&&sc.t&&a&&a.type!=='judge'){sc.t=Gender.fixText(sc.t,sc.sp);}}catch(e){if(window.console)console.error('gender fix',e);}
+  return sc;
+ });
+};
+/* 舊存檔：易裝中補上知情秘辛 */
+var _fs=fixState;
+fixState=function(st){
+ var s=_fs(st);
+ try{if(s&&s.p&&!s.p.disg&&s.p.pg&&s.p.pg!==s.p.gender){s.p.pg=s.p.gender;}}catch(e){}
+ return s;
+};
+var _lo=loadObj;
+loadObj=function(o){var r=_lo(o);try{Gender.ensure();}catch(e){}return r;};
+})();
+
+/* ---- 65_thread.js ---- */
+/* ===== 65_thread.js：AI 事件線程持久化（斷線可接續）＋ NPC 事件記憶 =====
+ * S.x.thread={ver,seq,cur:{id,title,npcs[],spot,region,d0,d1,turns[],last,status,inflight,pend,err,mem{}},done[]}
+ * 流程：AI.run(free/gen) 進場→Thread.begin（建線程、記玩家輸入入 NPC 記憶、存檔）→成功 Thread.ok（逐回合記錄、NPC 記憶、Facts、存檔）
+ *       →失敗 Thread.bad（標記 paused、保留原文並盡量搶救敘述與對白）→「事件暫停」場景（重試／離線接續／放下）。 */
+(function(){
+var Thread=window.Thread={};
+var MAXT=30,MAXMEM=8;
+function X(){return (S&&S.x)?S.x:null;}
+function TH(){var x=X();if(!x)return null;if(!x.thread)x.thread={ver:1,seq:0,cur:null,done:[]};return x.thread;}
+function T(){var x=X();return (x&&x.thread&&x.thread.cur)?x.thread.cur:null;}
+Thread.cur=T;
+function nameOf(id){return (NPC[id]&&NPC[id].n)||id;}
+function clean(t){return String(t||'').replace(/〔[^〕]*〕/g,'').replace(/\s+/g,' ').replace(/^\s+|\s+$/g,'');}
+function save(){try{if(SET.autosave&&!(window.UIs&&UIs.noAuto)&&typeof saveSlot==='function')saveSlot('auto',true);}catch(e){}}
+function npcsIn(text){
+ var out=[];if(!text)return out;
+ for(var i=0;i<NPCS.length;i++){var n=NPCS[i];if(!n||!n.n||n.n.length<2)continue;if(text.indexOf(n.n)>=0&&alive(n.id)&&out.indexOf(n.id)<0)out.push(n.id);if(out.length>=8)break;}
+ return out;
+}
+Thread.npcsIn=npcsIn;
+/* ---------- 記憶 ---------- */
+function note(th,id,txt,q){
+ if(!id||!NPC[id]||!alive(id))return;
+ var m=th.mem[id]||(th.mem[id]=[]);
+ if(m.length&&m[m.length-1].t===txt)return;
+ m.push({d:S.day,t:String(txt).slice(0,90),q:q?String(q).slice(0,60):''});
+ if(m.length>MAXMEM)m.shift();
+ try{addMem(id,'《'+th.title+'》'+String(txt).slice(0,70));}catch(e){}
+ if(th.npcs.indexOf(id)<0){th.npcs.push(id);if(th.npcs.length>8)th.npcs.shift();}
+}
+function evFact(th,ids){
+ if(!window.Facts||!ids.length)return;
+ try{
+  var f=th.fid?Facts.get(th.fid):null;
+  if(!f){
+   var res=Facts.ingest([{type:'event',subject:'p',object:'',kin:'other',text:S.p.name+'牽涉「'+th.title+'」一事，在場者親眼所見、親耳所聞',vis:'secret',knownBy:['p'].concat(ids.slice(0,6)),proof:'none',mag:1}],{src:'thread',force:1});
+   if(res.items.length){f=res.items[0].f;th.fid=f.i;}
+  }
+  if(f){for(var i=0;i<ids.length;i++){if(alive(ids[i])&&f.kn[ids[i]]===undefined)Facts.learn(ids[i],f,'',85,true);}}
+ }catch(e){if(window.console)console.error('thread fact',e);}
+}
+/* ---------- 對白抽取 ---------- */
+function linesOf(text,sp){
+ var out=[],re=/「([^」]{2,80})」/g,m;
+ while((m=re.exec(text))&&out.length<5){
+  var before=text.slice(Math.max(0,m.index-12),m.index);var who='';
+  for(var i=0;i<NPCS.length;i++){var n=NPCS[i];if(n&&n.n&&n.n.length>=2&&before.indexOf(n.n)>=0){who=n.id;}}
+  if(!who&&sp&&NPC[sp])who=sp;
+  out.push({id:who,t:m[1].slice(0,60)});
+ }
+ return out;
+}
+Thread.linesOf=linesOf;
+/* ---------- 開始／成功／失敗 ---------- */
+function newThread(a){
+ var h=TH();h.seq++;
+ var title=(a.type==='free'&&a.text)?'「'+String(a.text).slice(0,10)+'」':'一樁新事';
+ var th={id:'th'+h.seq,title:title,npcs:[],spot:S.p.spot,region:S.p.region,d0:S.day,d1:S.day,turns:[],last:null,status:'active',inflight:0,pend:null,err:'',mem:{},fid:0,fails:0,lg:'',off:0};
+ if(h.cur&&h.cur.turns&&h.cur.turns.length){h.done.push({id:h.cur.id,title:h.cur.title,d:h.cur.d1,mem:slimMem(h.cur.mem)});if(h.done.length>5)h.done.shift();}
+ h.cur=th;return th;
+}
+function slimMem(m){var o={};for(var k in m){var arr=m[k];if(arr&&arr.length)o[k]=arr.slice(-2);}return o;}
+Thread.begin=function(a){
+ var h=TH(),th=h.cur;
+ var cont=false;
+ if(th&&th.status!=='closed'){
+  if(a.th)cont=true;
+  else if(a.type==='free'&&S.day-th.d1<=10)cont=true;
+  else if(th.status==='paused'&&a.retry)cont=true;
+ }
+ if(!cont)th=newThread(a);
+ th.inflight=1;th.pend={type:a.type,text:String(a.text||'').slice(0,200),note:a.note?String(a.note).slice(0,200):''};
+ th.status='active';th.rt=a.retry?1:0;
+ /* 玩家輸入：即時寫入在場 NPC 的記憶（即使之後 AI 斷線）*/
+ var key=S.day+'|'+th.pend.text;
+ if(a.type==='free'&&th.pend.text&&th.lg!==key&&!a.retry){
+  th.lg=key;
+  var aud=[];
+  th.npcs.slice(-3).forEach(function(i){if(aud.indexOf(i)<0)aud.push(i);});
+  th.lgd=th.lgd||{};
+  aud.slice(0,4).forEach(function(i){note(th,i,'你（'+S.p.name+'）當面說：「'+th.pend.text.slice(0,50)+'」',th.pend.text);th.lgd[i]=key;});
+  th.pin=th.pend.text;
+  evFact(th,aud);
+ }
+ save();
+ return th;
+};
+function digest(th,text,sp,input,opts){
+ opts=opts||{};
+ var sum=clean(text);
+ var lines=linesOf(sum,sp);
+ var ids=[];if(sp&&NPC[sp]&&alive(sp))ids.push(sp);
+ lines.forEach(function(l){if(l.id&&ids.indexOf(l.id)<0)ids.push(l.id);});
+ var here=[];try{here=hereNpcs();}catch(e0){}
+ npcsIn(sum).forEach(function(i){if(ids.indexOf(i)<0&&ids.length<6&&here.indexOf(i)>=0&&spotOf(i)===S.p.spot)ids.push(i);});
+ var turn={n:th.turns.length+1,d:S.day,in:input?String(input).slice(0,60):'',sc:sum.slice(0,200),sp:sp||'',lines:lines,ok:opts.salv?0:1};
+ if(opts.salv)turn.salv=1;if(opts.off)turn.off=1;
+ if(opts.fx)turn.fx=opts.fx;
+ if(opts.ch)turn.ch=opts.ch;
+ th.turns.push(turn);if(th.turns.length>MAXT)th.turns.splice(1,1);
+ /* NPC 記憶：自己說過的話＋這一幕的概要 */
+ th.lgd=th.lgd||{};var ikey=S.day+'|'+(input||'');
+ ids.forEach(function(id){
+  if(input&&th.lgd[id]!==ikey){note(th,id,'你（'+S.p.name+'）當面說：「'+String(input).slice(0,50)+'」',input);th.lgd[id]=ikey;}
+  var mine=lines.filter(function(l){return l.id===id;});
+  if(mine.length)note(th,id,'我說：「'+mine[0].t+'」'+(mine[1]?'、「'+mine[1].t+'」':''));
+  else note(th,id,'在場：'+sum.slice(0,40));
+ });
+ evFact(th,ids);
+ th.d1=S.day;
+ return turn;
+}
+function titleFrom(out,sc){
+ var t=out&&out.recap?out.recap:'';
+ if(!t){var s=clean(sc&&sc.t||'').replace(/^【[^】]*】/,'');var m=s.match(/^[^。！？]{4,18}/);t=m?m[0]:'';}
+ return t.replace(/[「」《》]/g,'').slice(0,16);
+}
+Thread.ok=function(a,sc,th){
+ th=th||T();if(!th)return;
+ th.inflight=0;th.status='active';th.err='';th.fails=0;th.off=0;th.rt=0;
+ var out=AI.lastOut||null;
+ if(!th.turns.length||/^(一樁新事|「)/.test(th.title)){var tt=titleFrom(out,sc);if(tt)th.title=tt;}
+ var chs=[];(sc.ch||[]).forEach(function(c){if(c&&c.ai&&c.a&&c.a.text)chs.push(String(c.a.text).slice(0,40));});
+ var fxs='';try{var fx=out&&out.fx;if(fx){var ps=[];if(fx.st)for(var k in fx.st)ps.push(k+(fx.st[k]>=0?'+':'')+fx.st[k]);if(fx.rel)for(var r in fx.rel)ps.push(nameOf(r)+'關係');fxs=ps.slice(0,5).join(' ');}}catch(e){}
+ digest(th,(out&&out.scene)||sc.t||'',sc.sp,th.pend&&th.pend.text,{ch:chs,fx:fxs});
+ th.last={t:clean(sc.t).slice(0,500),sp:sc.sp||'',ch:chs};
+ th.pend=null;
+ save();
+};
+/* 搶救原文：JSON 殘缺時抽出 scene 欄位，否則視為純文字敘述 */
+Thread.readable=function(raw){
+ var t=String(raw||'').replace(/```(?:json)?/gi,'').replace(/^\s+|\s+$/g,'');
+ if(!t)return {text:'',sp:''};
+ var rep=window.AI&&AI.repairJSON?AI.repairJSON(t):null;
+ if(rep&&rep.scene)return {text:rep.scene,sp:rep.speaker||''};
+ if(/^\s*[\[{]/.test(t)&&!/[\u4e00-\u9fa5]{8}/.test(t))return {text:'',sp:''};
+ t=t.replace(/"[a-zA-Z_]+"\s*:/g,'').replace(/[{}\[\]"]/g,' ');
+ return {text:t.replace(/\s+/g,' ').slice(0,600),sp:''};
+};
+Thread.bad=function(a,e,th){
+ th=th||T();if(!th)return;
+ th.inflight=0;
+ if(e&&e.kind==='cancel')return;
+ th.status='paused';th.fails=(th.fails||0)+1;
+ var m='';try{m=AI.errMsg(e);}catch(x){m=String(e&&e.message||e||'');}
+ th.err=m.replace(/（已改用離線劇情）|（60 秒內不再呼叫 AI，先用離線劇情）/g,'').slice(0,120);
+ /* 已有回覆但解析失敗：保留原文，搶救敘述與對白 */
+ var raw=AI.lastRaw;
+ if(raw&&e&&(e.kind==='parse'||e.kind==='schema'||e.kind==='canon'||e.kind==='leak')){
+  th.raw=String(raw).slice(0,800);
+  var rd=Thread.readable(raw);
+  if(rd.text&&rd.text.replace(/\s/g,'').length>=12&&e.kind!=='canon'&&e.kind!=='leak'){
+   digest(th,rd.text,rd.sp,th.pend&&th.pend.text,{salv:1});
+   th.last={t:clean(rd.text).slice(0,500),sp:rd.sp||'',ch:[]};
+   th.salv=(th.salv||0)+1;
+  }
+ }
+ try{addLog('事件《'+th.title+'》因AI中斷而暫停，可從行動選單接續。');}catch(x){}
+ save();
+};
+/* ---------- AI.run 包裝 ---------- */
+var _run=AI.run;
+AI.run=function(a){
+ if(!a||(a.type!=='free'&&a.type!=='gen')||a.nothr||!X())return _run(a);
+ var th=null;try{th=Thread.begin(a);}catch(e){if(window.console)console.error('thread begin',e);}
+ AI.lastRaw=null;AI.lastOut=null;
+ var p;try{p=_run(a);}catch(e2){p=Promise.reject(e2);}
+ return p.then(function(sc){
+  try{Thread.ok(a,sc,th);}catch(e3){if(window.console)console.error('thread ok',e3);}
+  return sc;
+ },function(e4){
+  try{Thread.bad(a,e4,th);}catch(e5){if(window.console)console.error('thread bad',e5);}
+  throw e4;
+ });
+};
+/* 捕捉原文與解析結果 */
+var _call=AI.call;
+AI.call=function(m,o){
+ var p=_call(m,o);
+ return p.then(function(r){try{if(r&&r.text!==undefined)AI.lastRaw=r.text;}catch(e){}return r;});
+};
+var _val=AI.validate;
+AI.validate=function(j,need){
+ if(j&&j._repaired&&need&&(!j.choices||j.choices.length<2)){
+  var d=['靜觀其變，看對方如何反應','追問下去，問個明白','先行告退，另作打算'];
+  j.choices=(j.choices||[]).slice();for(var i=0;j.choices.length<2&&i<d.length;i++)j.choices.push({text:d[i]});
+ }
+ var out=_val(j,need);
+ AI.lastOut=out;
+ return out;
+};
+/* 殘缺 JSON 修復 */
+function unq(s){try{return JSON.parse('"'+s+'"');}catch(e){return s.replace(/\\n/g,'\n').replace(/\\"/g,'"').replace(/\\\\/g,'\\');}}
+AI.repairJSON=function(text){
+ var t=String(text||'');
+ var m=t.match(/"(?:scene|text|story)"\s*:\s*"((?:[^"\\]|\\[\s\S])*)("|$)/);
+ if(!m)return null;
+ var sc=unq(m[1]);if(sc.replace(/\s/g,'').length<8)return null;
+ var o={scene:sc,_repaired:1,choices:[]};
+ var sp=t.match(/"speaker"\s*:\s*"([A-Za-z_]+)"/);if(sp)o.speaker=sp[1];
+ var bg=t.match(/"bg"\s*:\s*"([A-Za-z_]+)"/);if(bg)o.bg=bg[1];
+ var ci=t.indexOf('"choices"');
+ if(ci>=0){
+  var tail=t.slice(ci);var re=/"(?:text|label)"\s*:\s*"((?:[^"\\]|\\[\s\S])*)"/g,mm;
+  while((mm=re.exec(tail))&&o.choices.length<5)o.choices.push({text:unq(mm[1])});
+  if(!o.choices.length){var arr=tail.match(/\[([\s\S]*)/);if(arr){var re2=/"((?:[^"\\]|\\[\s\S]){2,40})"/g,m2;while((m2=re2.exec(arr[1]))&&o.choices.length<5)o.choices.push({text:unq(m2[1])});}}
+ }
+ return o;
+};
+var _ej=AI.extractJSON;
+AI.extractJSON=function(text){
+ var r=null;try{r=_ej(text);}catch(e){r=null;}
+ if(r&&typeof r==='object'&&(r.scene||r.text||r.story))return r;
+ if(r&&typeof r==='object'&&!/"(?:scene|text|story)"/.test(String(text)))return r;
+ var rep=AI.repairJSON(text);
+ return rep||r;
+};
+/* ---------- AI 提示：事件線程記錄＋NPC 記憶 ---------- */
+Thread.block=function(compact){
+ var th=T();if(!th||th.status==='closed')return '';
+ if(!th.turns.length&&!th.pend)return '';
+ if(S.day-th.d1>40)return '';
+ var L=[];
+ L.push('【事件線程「'+th.title+'」（第'+th.d0+'日起，已'+th.turns.length+'回合，'+(th.status==='paused'?'曾因連線中斷暫停，現須接續':'進行中')+'）】參與：'+(th.npcs.map(function(i){return nameOf(i)+'('+i+')';}).join('、')||'—')+'；地點：'+placeStr());
+ var ts=th.turns.slice(compact?-3:-8);
+ ts.forEach(function(t){
+  var s='第'+t.n+'回合'+(t.in?'｜玩家：「'+t.in+'」':'')+'｜'+t.sc.slice(0,compact?60:110);
+  var ls=(t.lines||[]).slice(0,3).map(function(l){return (l.id?nameOf(l.id):'')+'：「'+l.t.slice(0,36)+'」';}).join(' ');
+  if(ls)s+='｜對白 '+ls;
+  L.push(s);
+ });
+ if(th.last&&th.last.t)L.push('【最後一幕】'+th.last.t.slice(0,compact?120:260)+(th.last.ch&&th.last.ch.length?'｜上次選項：'+th.last.ch.join('／'):''));
+ var ml=[];
+ th.npcs.forEach(function(i){var m=th.mem[i];if(m&&m.length){ml.push(nameOf(i)+'記得：'+m.slice(-2).map(function(x){return x.t;}).join('；').slice(0,compact?50:90));}});
+ if(ml.length)L.push('【各人對此事件的記憶（須在對白中體現，如「你上次說過…」）】\n'+ml.slice(0,5).join('\n'));
+ if(th.pend&&th.pend.text&&(th.status==='paused'||th.rt))L.push('【中斷處】玩家剛才的行動「'+th.pend.text+'」尚未得到回應，請直接接續這一步，不要重新開場、不要重複前文。');
+ else L.push('【續寫要求】本請求接續上述事件，保持人物、地點、語氣一致，人物須記得已發生的對白。');
+ return L.join('\n');
+};
+var _um=AI.userMsg;
+AI.userMsg=function(a){
+ var s=_um(a);
+ try{if(a&&(a.type==='free'||a.type==='gen')){var b=Thread.block(SET.sumLevel==='low');if(b)s=s.replace(/\n【上一幕】/,'\n'+b+'\n【上一幕】');if(b&&s.indexOf(b)<0)s=b+'\n'+s;}}catch(e){if(window.console)console.error('thread block',e);}
+ return s;
+};
+/* 其他提示也帶各 NPC 的事件記憶一行 */
+var _sum=AI.summary;
+AI.summary=function(){
+ var s=_sum();
+ try{var ml=Thread.memLines(4);if(ml.length)s+='\n【事件記憶】'+ml.join('｜');}catch(e){}
+ return s;
+};
+Thread.memLines=function(n){
+ var h=X()&&X().thread;if(!h)return [];
+ var out=[];
+ function add(title,mem){for(var id in mem){var a=mem[id];if(a&&a.length&&alive(id)){var q=a[a.length-1];out.push(nameOf(id)+'於《'+title+'》記得：'+q.t.slice(0,36));}}}
+ if(h.cur)add(h.cur.title,h.cur.mem);
+ for(var i=h.done.length-1;i>=0&&out.length<n;i--)add(h.done[i].title,h.done[i].mem);
+ return out.slice(0,n);
+};
+/* ---------- 場景 ---------- */
+function unfinished(){var th=T();return !!(th&&th.status!=='closed'&&(th.status==='paused'||(th.last&&th.last.ch&&th.last.ch.length)||th.turns.length));}
+Thread.open=unfinished;
+Thread.errText=function(th){var e=th.err||(AI.lastErr||'');return String(e).replace(/（已改用離線劇情）/g,'').replace(/\n.*$/,'').slice(0,100);};
+Thread.pausedScene=function(extra){
+ var th=T();if(!th)return NODES.hub({});
+ var who=th.npcs.slice(-4).map(nameOf).join('、')||'—';
+ var t='【事件暫停】《'+th.title+'》\n';
+ t+='⚠ '+(th.err?th.err:'AI 回覆中斷')+'\n';
+ if(extra)t+=extra+'\n';
+ t+='\n已記錄 '+th.turns.length+' 回合，參與者：'+who+'。他們都記得先前發生過的事與你說過的話。';
+ if(th.last&&th.last.t)t+='\n上一幕：'+th.last.t.slice(0,110)+'……';
+ if(th.pend&&th.pend.text)t+='\n你剛才的行動：「'+th.pend.text+'」（尚未得到回應）';
+ t+='\n\n可以重試讓 AI 從上次的選項接續；或以離線劇情依前文與參與者的記憶接續；或暫時放下，之後仍可從行動選單、任務面板找回。';
+ var c=[ch('🔁 重試接續','thRetry',{}),ch('📖 以離線劇情接續','thOffline',{}),ch('🗑 放下事件','thDrop',{}),ch('📜 行動選單','hub')];
+ return {t:t,sp:'',bg:th.spot||S.p.spot,kind:'event',tag:'事件暫停',ch:c,thp:1,noai:1};
+};
+Thread.resumeScene=function(){
+ var th=T();if(!th)return NODES.hub({});
+ var t='【未完成事件】《'+th.title+'》\n'+(th.last&&th.last.t?th.last.t:'事件尚未結束。');
+ var c=[];
+ var chs=(th.last&&th.last.ch)||[];
+ chs.forEach(function(x){c.push({t:'✦ '+x,go:'aiNext',a:{text:x},ai:1});});
+ c.push(ch('📖 以離線劇情接續','thOffline',{}));
+ c.push(ch('🗑 放下事件','thDrop',{}));
+ c.push(ch('📜 行動選單','hub'));
+ return {t:t,sp:(th.last&&th.last.sp)||'',bg:th.spot||S.p.spot,kind:'event',tag:'未完成事件',ch:c,noai:1};
+};
+Thread.sceneFor=function(){var th=T();if(!th)return NODES.hub({});return th.status==='paused'?Thread.pausedScene():Thread.resumeScene();};
+Thread.paused=function(a){var th=T();return !!(th&&th.status==='paused'&&a&&(a.type==='free'||a.type==='gen')&&!AI.manual());};
+Thread.unavail=function(a){
+ var th=T();
+ if(!th||!a||!(a.type==='free'||a.type==='gen')||!a.th||AI.manual()||th.status==='closed')return false;
+ th.status='paused';th.inflight=0;th.err=(AI.lastErr?String(AI.lastErr).replace(/（已改用離線劇情）/g,'').replace(/\n.*$/,''):'AI 暫停或未啟用，無法連線');
+ th.pend={type:a.type,text:String(a.text||'').slice(0,200),note:''};
+ try{addLog('事件《'+th.title+'》因AI無法使用而暫停。');}catch(x){}
+ save();return true;
+};
+NODES.thOpen=function(){return Thread.sceneFor();};
+NODES.thPause=function(){return Thread.pausedScene();};
+NODES.thDrop=function(a){
+ var th=T();if(!th)return NODES.hub({});
+ if(!a||!a.yes){
+  return {t:'【放下事件】《'+th.title+'》\n確定要放下嗎？事件記錄會收進舊事，參與者仍記得發生過的事。',sp:'',bg:S.p.spot,kind:'menu',ch:[ch('確定放下','thDrop',{yes:1}),ch('↩ 返回','thOpen',{})]};
+ }
+ Thread.close();
+ return resultScene('放下','你決定暫時放下這樁事。該來的總會再來，只是此刻，你先轉身離開。','',S.p.spot,[ch('繼續','hub')]);
+};
+Thread.close=function(){
+ var h=TH();var th=h&&h.cur;if(!th)return;
+ th.status='closed';
+ if(th.turns.length){h.done.push({id:th.id,title:th.title,d:th.d1,mem:slimMem(th.mem)});if(h.done.length>5)h.done.shift();}
+ h.cur=null;save();
+};
+NODES.thRetry=function(){
+ var th=T();if(!th)return NODES.hub({});
+ if(!AI.manual()&&!AI.ready()){
+  return Thread.pausedScene('AI 目前不可用（可能已自動暫停或冷卻中）。請到「設定→測試連線」重新啟用，或先以離線劇情接續。');
+ }
+ var p=th.pend||{type:'gen',text:''};
+ var type=p.type,text=p.text;
+ if(type==='gen'&&th.turns.length){type='free';text='（請從上一幕接續，繼續發展此事件）';}
+ if(type==='free'&&!text)text='（請從上一幕接續，繼續發展此事件）';
+ return {t:'……',sp:'',bg:S.p.spot,kind:'loading',ch:[],async:{type:type,text:text,note:p.note||'',th:1,retry:1,fb:{go:'thPause',a:{}}}};
+};
+/* aiNext：有線程時標記延續，離線版本改為離線接續 */
+var _an=NODES.aiNext;
+NODES.aiNext=function(a){
+ var sc=_an(a);
+ try{var th=T();if(th&&th.status!=='closed'&&sc&&sc.async){sc.async.th=1;sc.async.fb={go:'thOffStep',a:{pick:a.text,fromAi:1}};}}catch(e){}
+ return sc;
+};
+/* ---------- 離線接續 ---------- */
+function tone(txt){
+ if(/威脅|拒絕|冷笑|殺|滾|走開|騙|逼|不肯|不答應|質問/.test(txt))return 'neg';
+ if(/誠|謝|答應|幫|信任|坦白|請教|懇|承諾|保證|好的|願意|感激/.test(txt))return 'pos';
+ if(/問|追問|打聽|查|試探|探|為何|為什麼/.test(txt))return 'ask';
+ if(/沉默|不語|靜觀|等待|看/.test(txt))return 'wait';
+ return 'mid';
+}
+function mainNpc(th){
+ var c=[th.last&&th.last.sp];
+ for(var i=th.turns.length-1;i>=0&&c.length<6;i--){c.push(th.turns[i].sp);(th.turns[i].lines||[]).forEach(function(l){c.push(l.id);});}
+ th.npcs.slice().reverse().forEach(function(x){c.push(x);});
+ for(i=0;i<c.length;i++){if(c[i]&&NPC[c[i]]&&alive(c[i]))return c[i];}
+ return '';
+}
+Thread.main=mainNpc;
+function relLine(id){
+ var r=R(id),n=nameOf(id);
+ if(r.ha>=40)return n+'眼神冷硬，話裡帶刺。';
+ if(r.su>=45)return n+'的目光停在你臉上，似在掂量你每一句話的真假。';
+ if(r.af>=45||r.lo>=35)return n+'神色柔和了幾分，語氣也放緩了。';
+ if(r.fe>=40)return n+'下意識退了半步，聲音壓得很低。';
+ if(r.re>=40)return n+'端正了神色，言語間多了幾分敬意。';
+ return n+'沉吟片刻，不動聲色。';
+}
+function secretLine(id){
+ try{
+  if(!window.Facts)return '';
+  var l=Facts.F().list;
+  for(var i=0;i<l.length;i++){var f=l[i];if(f.subject==='p'&&f.kn&&f.kn[id]!==undefined&&f.vis<2&&f.type!=='event'&&f.st!=='false'){return nameOf(id)+'心裡還揣著另一件關於你的事——「'+String(f.t).slice(0,22)+'」——這讓他的措辭多了分寸。';}}
+ }catch(e){}
+ return '';
+}
+function offScene(th,pick,res){
+ var id=mainNpc(th);
+ var lastT=th.turns.length?th.turns[th.turns.length-1]:null;
+ var t='【事件接續·離線】《'+th.title+'》\n';
+ if(!pick){
+  t+='承接前文：'+(lastT?lastT.sc.slice(0,90)+'……':'事情才剛開始。');
+  if(th.pend&&th.pend.text)t+='\n你剛才的行動「'+th.pend.text+'」，化作了接下來的局面。';
+ }else{
+  t+='你選擇了：「'+pick+'」。';
+  if(res)t+=res;
+ }
+ if(id){
+  var m=th.mem[id]||[];var q=null;for(var i=m.length-1;i>=0;i--){if(m[i].q){q=m[i];break;}}
+  t+='\n\n'+relLine(id);
+  if(q)t+='\n「你先前說過：『'+q.q.slice(0,36)+'』——我可都記著。」'+nameOf(id)+'緩緩道。';
+  else if(lastT&&lastT.lines&&lastT.lines.length){var ll=lastT.lines[lastT.lines.length-1];t+='\n'+nameOf(ll.id||id)+'低聲重複著先前的話：「'+ll.t.slice(0,30)+'」。';}
+  var sl=secretLine(id);if(sl)t+='\n'+sl;
+ }else t+='\n\n四下無人，只餘你一人回想方才的種種。';
+ t+='\n\n（AI 暫時無法連線，此幕依先前記錄、參與者記憶與已知秘辛離線生成，並非從頭開始。）';
+ var c=[];
+ var opts=(th.last&&th.last.ch&&th.last.ch.length)?th.last.ch.slice(0,3):['順著話頭追問下去','坦誠相告，說出心中顧慮','敷衍幾句，設法脫身'];
+ opts.forEach(function(x){c.push(ch('✦ '+x,'thOffStep',{pick:x}));});
+ c.push(ch('🤐 保持沉默，靜觀其變','thOffStep',{pick:'保持沉默，靜觀其變'}));
+ if(th.off>=3)c.push(ch('🏁 就此了結此事','thEnd',{}));
+ c.push(ch('🔁 AI 恢復後重試接續','thRetry',{}));
+ c.push(ch('📜 行動選單','hub'));
+ return {t:t,sp:id||'',bg:th.spot||S.p.spot,kind:'event',tag:'事件接續',ch:c,noai:1};
+}
+NODES.thOffline=function(){
+ var th=T();if(!th)return NODES.hub({});
+ th.status='active';th.mode='off';th.inflight=0;
+ save();
+ return offScene(th,'',null);
+};
+NODES.thOffStep=function(a){
+ var th=T();if(!th)return NODES.hub({});
+ th.status='active';th.inflight=0;th.off=(th.off||0)+1;
+ var pick=String(a.pick||'').slice(0,60);
+ var id=mainNpc(th);var tn=tone(pick);var res='';
+ if(id){
+  if(tn==='pos'){addRel(id,'af',3,null);addRel(id,'tr',2,null);res=' '+nameOf(id)+'聽罷，神色緩和。';}
+  else if(tn==='neg'){addRel(id,'af',-3,null);addRel(id,'su',3,null);res=' '+nameOf(id)+'臉色沉了下來。';}
+  else if(tn==='ask'){addRel(id,'su',1,null);res=' '+nameOf(id)+'遲疑了一下，才一點一點地回答。';}
+  else if(tn==='wait'){res=' 沉默在兩人之間拉長，誰也沒有先開口。';}
+  else{addRel(id,'tr',1,null);res=' '+nameOf(id)+'點了點頭。';}
+ }
+ var o=applyFx({days:1});
+ th.turns.push({n:th.turns.length+1,d:S.day,in:pick,sc:('（離線）'+pick+res).slice(0,200),sp:id||'',lines:[],ok:1,off:1});
+ if(th.turns.length>MAXT)th.turns.splice(1,1);
+ if(id)note(th,id,'你（'+S.p.name+'）說：「'+pick.slice(0,40)+'」',pick);
+ th.last={t:clean('你選擇了：「'+pick+'」。'+res),sp:id||'',ch:(th.last&&th.last.ch)||[]};
+ th.d1=S.day;th.pend=null;
+ save();
+ return offScene(th,pick,res);
+};
+NODES.thEnd=function(){
+ var th=T();if(!th)return NODES.hub({});
+ var id=mainNpc(th);
+ if(id){addRel(id,'tr',2,null);}
+ try{addLog('事件《'+th.title+'》告一段落。');}catch(e){}
+ var title=th.title;Thread.close();
+ return resultScene('事件了結','《'+title+'》就這樣暫告一段落。參與其中的人，都把這段日子默默記在心裡。','',S.p.spot,[ch('繼續','hub')]);
+};
+/* ---------- NPC 引用事件對白（離線談話）---------- */
+Thread.quote=function(id){
+ var h=X()&&X().thread;if(!h)return '';
+ var list=[];if(h.cur)list.push(h.cur);
+ for(var i=h.done.length-1;i>=0;i--)list.push(h.done[i]);
+ for(i=0;i<list.length;i++){
+  var th=list[i];var m=th.mem&&th.mem[id];if(!m||!m.length)continue;
+  var q=null;for(var j=m.length-1;j>=0;j--){if(m[j].q){q=m[j];break;}}
+  if(!q&&m.length)q={t:m[m.length-1].t,q:''};
+  th.qs=th.qs||{};
+  if(th.qs[id]!==undefined&&S.day-th.qs[id]<8)continue;
+  th.qs[id]=S.day;
+  var r=R(id);
+  var lead=r.su>=45?'目光一冷':(r.af>=40?'含笑':'若有所思');
+  if(q.q)return nameOf(id)+lead+'：「說起來……你在《'+th.title+'》那件事上說過『'+q.q.slice(0,30)+'』，我可還記著。」';
+  return nameOf(id)+lead+'：「《'+th.title+'》那件事，我一直沒忘。」';
+ }
+ return '';
+};
+var _dtk=NODES.doTalk;
+if(_dtk)NODES.doTalk=function(a){
+ var sc=_dtk(a);
+ try{if(sc&&(sc.kind==='talk'||sc.kind==='result')&&a&&a.id&&!sc.thq){var q=Thread.quote(a.id);if(q){sc.t+='\n\n'+q;sc.thq=1;}}}catch(e){if(window.console)console.error('thread quote',e);}
+ return sc;
+};
+/* ---------- UI 入口 ---------- */
+QHUB.push({cond:function(){return unfinished();},t:function(){var th=T();return '📖 未完成事件·《'+th.title+'》'+(th.status==='paused'?'（暫停）':'');},go:'thOpen',g:'任務'});
+var _pl=PANELS.log;
+PANELS.log=function(){
+ var h=_pl();
+ try{
+  if(unfinished()&&(UIs.logTab==='quest'||UIs.logTab==='log'||!UIs.logTab)){
+   var th=T();
+   h+='<div class="sec"><h4>未完成事件</h4><div style="margin-bottom:6px"><b>'+esc(th.title)+'</b>'+(th.status==='paused'?' <span class="hint">（因AI中斷而暫停）</span>':'')+'<div class="hint">已記 '+th.turns.length+' 回合；參與：'+esc(th.npcs.map(nameOf).join('、')||'—')+'</div><button class="opt" data-act="thopen">📖 接續此事件</button> <button class="opt" data-act="thdrop">🗑 放下</button></div></div>';
+  }
+ }catch(e){}
+ return h;
+};
+PACT.thopen=function(){closeModal();present(Thread.sceneFor(),{nopolish:true});};
+PACT.thdrop=function(){closeModal();present(NODES.thDrop({}),{nopolish:true});};
+/* 讀檔：舊檔無 thread 則不處理；中斷時仍在請求中者轉為暫停 */
+var _fs=fixState;
+fixState=function(st){
+ var s=_fs(st);
+ try{
+  var h=s&&s.x&&s.x.thread;
+  if(h){
+   if(!h.done)h.done=[];if(typeof h.seq!=='number')h.seq=0;
+   var th=h.cur;
+   if(th){
+    if(!th.mem)th.mem={};if(!th.npcs)th.npcs=[];if(!th.turns)th.turns=[];
+    if(th.inflight){th.inflight=0;th.status='paused';th.err=th.err||'頁面重新整理或遊戲關閉時，AI 回覆尚未完成';}
+   }
+  }
+ }catch(e){}
+ return s;
+};
+var _lo=loadObj;
+loadObj=function(o){
+ var r=_lo(o);
+ try{if(r&&Thread.open()){var th=T();toast('📖 有未完成事件《'+th.title+'》'+(th.status==='paused'?'（已暫停，可重試接續）':''),4200);}}catch(e){}
+ return r;
+};
+})();
+
+/* ---- 66_identity.js ---- */
+/* ===== 66_identity.js：身分變更（入後宮／升遷／貶謫／出宮／入伍／任官／拜師／封爵／改籍）=====
+ * 與 Facts 同源：AI effects 可帶 change:{k,to,by}；離線自由輸入由 Facts.parse 辨識（如「嬴政想把我收入後宮，太后準了」）。
+ * 流程：Facts.norm 保留 chg → Facts.plaus 以 Idn.check 判定（按難度與條件）→ 屬實才 Facts.applyOnce → Idn.apply 正式改 S.p.path/rank/住處/選項，
+ * 事件公開，知情者按社交圖反應（巴結／妒忌／監視）；可回頭（貶謫、出宮）。S.x.idn={ver,hist[]}。 */
+(function(){
+var Idn=window.Idn={};
+function nmx(id){return id==='p'?S.p.name:(NPC[id]?NPC[id].n:'某人');}
+var KINDS={harem:'入後宮',promote:'升遷',demote:'貶謫',leave:'出宮／去職',enlist:'入伍',appoint:'任官',ennoble:'封爵',master:'拜師',register:'改籍'};
+Idn.KINDS=KINDS;
+function X(){if(!S.x.idn)S.x.idn={ver:1,hist:[]};if(!S.x.idn.hist)S.x.idn.hist=[];return S.x.idn;}
+var PATHN={'後宮':'consort','妃嬪':'consort','內侍':'eunuch','宦者':'eunuch','宮女':'maid','郎官':'guard','軍旅':'soldier','門客':'adviser','官吏':'adviser','方士':'physician','醫者':'physician','風月':'attendant','歌姬':'attendant','舞姬':'attendant','江湖':'wander','遊俠':'wander'};
+var EXTRA={'妃':['consort',0],'嬪':['consort',0],'美人':['consort',1],'夫人':['consort',4],'郎中':['guard',0],'郎':['guard',0],'將軍':['soldier',4],'校尉':['soldier',3],'相邦':['adviser',4],'客卿':['adviser',3],'太醫':['physician',3]};
+Idn.ladder=function(){var o=[];for(var k in PATHS){o.push(PATHS[k].n+'('+k+')：'+PATHS[k].ranks.join('＜'));}return o.join('；');};
+Idn.target=function(chg){
+ if(!chg)return null;var k=chg.k,to=String(chg.to||'');var cur=S.p;
+ function byName(s){
+  if(!s)return null;
+  if(PATHS[s])return {path:s,rank:0};
+  var m=s.match(/^(\w+)[:：](\d)$/);if(m&&PATHS[m[1]])return {path:m[1],rank:clamp(+m[2],0,4)};
+  for(var p in PATHS){for(var r=0;r<5;r++){if(s.indexOf(PATHS[p].ranks[r])>=0&&PATHS[p].ranks[r].length>=2)return {path:p,rank:r,named:1};}}
+  for(var nm in EXTRA){if(s.indexOf(nm)>=0)return {path:EXTRA[nm][0],rank:EXTRA[nm][1],named:1};}
+  for(var pn in PATHN){if(s.indexOf(pn)>=0)return {path:PATHN[pn],rank:0};}
+  return null;
+ }
+ var t=null;
+ if(k==='harem'){t=byName(to);if(!t||t.path!=='consort')t={path:'consort',rank:0};}
+ else if(k==='promote'||k==='appoint'){t=byName(to);if(!t||(!t.named&&t.path===cur.path)){t={path:cur.path,rank:Math.min(4,cur.rank+1)};}
+  if(t.path===cur.path&&t.rank<=cur.rank&&k==='promote')t.rank=Math.min(4,cur.rank+1);}
+ else if(k==='demote'){t=byName(to);if(!t||t.path!==cur.path||t.rank>=cur.rank)t={path:cur.path,rank:Math.max(0,cur.rank-1)};
+  if(cur.rank===0)return Idn.target({k:'leave',to:'',by:chg.by});}
+ else if(k==='leave'){
+  var h=X().hist;var prev=null;for(var i=h.length-1;i>=0;i--){if(h[i].from&&h[i].from.path!==cur.path){prev=h[i].from;break;}}
+  t=prev?{path:prev.path,rank:prev.rank,back:1}:{path:'wander',rank:0};
+  if(t.path===cur.path)t={path:'wander',rank:0};}
+ else if(k==='enlist'){t={path:'soldier',rank:0};var n2=byName(to);if(n2&&n2.path==='soldier')t.rank=n2.rank;}
+ else if(k==='ennoble'||k==='master'||k==='register'){t={path:cur.path,rank:cur.rank,keep:1};}
+ return t;
+};
+Idn.cleanChange=function(c){
+ if(!c||typeof c!=='object'||Array.isArray(c))return null;
+ var o={k:String(c.k||c.kind||c.type||'').slice(0,12)};
+ var map={'入後宮':'harem','收入後宮':'harem','升遷':'promote','晉升':'promote','貶謫':'demote','貶':'demote','出宮':'leave','去職':'leave','入伍':'enlist','從軍':'enlist','任官':'appoint','封爵':'ennoble','拜師':'master','改籍':'register'};
+ if(map[o.k])o.k=map[o.k];
+ if(!KINDS[o.k])return null;
+ o.to=String(c.to||'').slice(0,20);o.by=String(c.by||c.approver||'').slice(0,20);
+ if(c.ap)o.ap=1;if(typeof c.cond==='string')o.cond=c.cond.slice(0,40);
+ return o;
+};
+/* ---------- 條件判定（按難度）---------- */
+function authOK(k,by){
+ if(!by||!NPC[by])return false;var n=NPC[by];
+ if(k==='harem')return n.tier>=4||by===S.emp||by===S.reg||by==='zhaoji'||by==='huayang';
+ if(k==='promote'||k==='appoint'||k==='ennoble')return n.tier>=3||by===bossOf();
+ return n.tier>=2;
+}
+Idn.check=function(chg,o,src){
+ var r={ok:true,reasons:[],tgt:null,by:''};
+ var tgt=Idn.target(chg);r.tgt=tgt;
+ if(!tgt){r.ok=false;r.reasons.push('無法辨識目標身分');return r;}
+ var k=chg.k,cur=S.p,d=SET.diff||'normal';
+ var by=chg.by?Facts.resolve(chg.by):'';if(by==='p')by='';r.by=by;
+ if(!tgt.keep&&tgt.path===cur.path&&tgt.rank===cur.rank){r.ok=false;r.reasons.push('目前已是此身分');return r;}
+ if((tgt.path==='consort'||tgt.path==='maid')&&!tgt.back&&tgt.path!==cur.path&&pgOf()!=='f'){r.ok=false;r.reasons.push('旁人眼中你並非女子，不可入'+(tgt.path==='consort'?'後宮':'宮女之列'));return r;}
+ if(tgt.path==='eunuch'&&tgt.path!==cur.path&&!S.flags.eunuch){r.ok=false;r.reasons.push('須先受宮刑方為內侍');return r;}
+ if(k==='ennoble'&&cur.path!=='soldier'&&d==='hell'&&cur.st.rep<30){r.reasons.push('聲望不足');}
+ if(d==='easy'){if(by&&!alive(by)){r.reasons.push(nmx(by)+'已故');}}
+ else{
+  if(!by&&k!=='register'&&k!=='enlist'){r.reasons.push('缺少批准者');}
+  else if(by){
+   if(!alive(by))r.reasons.push(nmx(by)+'已故');
+   else{
+    if(!authOK(k,by))r.reasons.push(nmx(by)+'的地位不足以批准此事');
+    var rr=R(by);var fid=chg._f;var knows=false;try{if(fid)knows=Facts.knows(by,Facts.get(fid));}catch(e){}
+    var acq=rr.met||knows||locOf(by)===S.p.region;
+    if(!acq)r.reasons.push('與'+nmx(by)+'素無往來');
+    if(d==='hard'||d==='hell'){
+     if(rr.af+rr.tr<(d==='hell'?80:60)&&(k==='harem'||k==='promote'||k==='appoint'||k==='ennoble'))r.reasons.push('聖寵不足（'+nmx(by)+'對你的好感＋信任須達'+(d==='hell'?80:60)+'）');
+     if(cur.st.rep<(d==='hell'?20:10)&&(k==='harem'||k==='promote'||k==='appoint'||k==='ennoble'))r.reasons.push('聲望不足');
+     if(k==='harem'&&cur.st.mei<(d==='hell'?45:35))r.reasons.push('魅力不足');
+     if(d==='hell'&&locOf(by)!==S.p.region)r.reasons.push(nmx(by)+'不在此地，無法當面批准');
+    }
+   }
+  }
+  if(!chg.ap&&src!=='ai'&&k!=='register'&&k!=='enlist')r.reasons.push('尚未得到明確批准（只是想法）');
+ }
+ if(r.reasons.length)r.ok=false;
+ return r;
+};
+/* ---------- 同源接線 ---------- */
+var _norm=Facts.norm;
+Facts.norm=function(e){
+ var o=_norm(e);
+ if(o&&e&&e.change){var c=Idn.cleanChange(e.change);if(c){o.chg=c;if(!o.obj&&c.by){var bi=Facts.resolve(c.by);if(bi&&bi!=='p'&&bi!==o.sub)o.obj=bi;}}}
+ return o;
+};
+var _ce=Facts.cleanEffects;
+Facts.cleanEffects=function(arr){
+ var out=_ce(arr);
+ try{out.forEach(function(c){
+  for(var i=0;i<arr.length;i++){var e=arr[i];if(e&&e.change&&(e.text===c.text||(e.subject===c.subject&&e.object===c.object&&!c.text))){var cc=Idn.cleanChange(e.change);if(cc)c.change=cc;break;}}
+ });}catch(e){}
+ return out;
+};
+var _pl=Facts.plaus;
+Facts.plaus=function(o,src){
+ if(o&&o.chg){var c=Idn.check(o.chg,o,src);o._chk=c;if(!c.ok){Idn._why=(Idn._why||[]).concat(c.reasons);}return c.ok?95:12;}
+ return _pl(o,src);
+};
+var _ing=Facts.ingest;
+Facts.ingest=function(){Idn._why=[];var res=_ing.apply(this,arguments);try{if(res&&res.lines&&Idn._why.length){var w=Idn._why.filter(function(x,i,a){return a.indexOf(x)===i;});res.lines.push('（身分變更未成立：'+w.join('、')+'）');}}catch(e){}Idn._why=[];return res;};
+var _ao=Facts.applyOnce;
+Facts.applyOnce=function(f,o,res){
+ if(o&&o.chg&&f.st==='true'){
+  o.chg._f=f.i;
+  var c=Idn.check(o.chg,o,f.src);
+  if(!c.ok){f.st='claim';f.tr=0;if(res)res.lines.push('（身分變更未成立：'+c.reasons.join('、')+'）');return _ao(f,o,res);}
+ }
+ _ao(f,o,res);
+ if(o&&o.chg&&f.st==='true'&&f.applied){try{Idn.apply(o.chg,f,o,res);}catch(e){if(window.console)console.error('Idn.apply',e);}}
+};
+/* ---------- 生效 ---------- */
+var RES={consort:['xianyang','chamber'],maid:['xianyang','chamber'],eunuch:['xianyang','palace'],guard:['xianyang','palace']};
+Idn.apply=function(chg,f,o,res){
+ var tgt=Idn.target(chg);if(!tgt)return;
+ var k=chg.k,cur=S.p,by=chg.by?Facts.resolve(chg.by):'';if(by==='p')by='';
+ var from={path:cur.path,rank:cur.rank,fac:cur.fac,region:cur.region,spot:cur.spot,title:cur.title};
+ var lines=[];
+ if(!tgt.keep){
+  cur.path=tgt.path;cur.rank=clamp(tgt.rank,0,4);
+  if(tgt.path==='consort'||tgt.path==='maid'||tgt.path==='eunuch'||tgt.path==='guard'){if(cur.fac==='none')cur.fac='qin';}
+  if(tgt.path==='wander'&&k==='leave'&&!tgt.back){/* 出宮：離開宮廷勢力 */}
+  if(RES[tgt.path]&&!tgt.back){cur.region=RES[tgt.path][0];cur.spot=RES[tgt.path][1];}
+  else if(tgt.back&&from.path!==tgt.path){cur.fac=(from.fac&&from.fac!=='none')?cur.fac:cur.fac;}
+  if(tgt.path==='wander'||tgt.path==='soldier'||tgt.path==='adviser'||tgt.path==='physician'||tgt.path==='attendant'){
+   if(from.path==='consort'||from.path==='maid'||from.path==='eunuch'||from.path==='guard'){var sub=REGIONS[cur.region]&&(REGIONS[cur.region].sub0||REGIONS[cur.region].sub);if(sub)cur.spot=sub[0]===cur.spot?sub[0]:sub[0];}
+   if(tgt.path==='soldier')cur.spot='gate';
+  }
+  cur.boss='';
+  cur.title=titleOf();
+  if(window.Career&&S.car){S.car.via='身分變更';try{Career.sync();}catch(e){}}
+ }
+ var X_=X();X_.hist.push({d:S.day,k:k,from:from,to:{path:cur.path,rank:cur.rank},by:by});if(X_.hist.length>8)X_.hist.shift();
+ /* 專屬效果 */
+ var fx={st:{},rel:{}};
+ if(k==='master'&&by){S.flags['master_'+by]=S.day;fx.rel[by]={re:8,tr:6,af:3};lines.push('拜入'+nmx(by)+'門下。');}
+ if(k==='register'){S.flags.reg_free=S.day;fx.st.rep=2;lines.push('戶籍已改，從此身家清白。');}
+ if(k==='ennoble'){
+  if(cur.path==='soldier'&&typeof jueLv==='function'&&typeof JUE_AT!=='undefined'){var L=jueLv();if(L<20){cur.st.merit=Math.max(cur.st.merit,JUE_AT[L]);try{jueSync();}catch(e){}}lines.push('爵位：'+(typeof jueTitle==='function'?jueTitle():''));}
+  else{fx.st.rep=3;fx.st.inf=3;fx.st.gold=150;S.flags.ennobled=S.day;lines.push('受封食邑，聲望權勢與賞賜皆增。');}
+ }
+ if(k==='harem'||k==='promote'||k==='appoint'){fx.st.rep=(fx.st.rep||0)+2;}
+ if(k==='demote'||k==='leave'){fx.st.rep=-2;}
+ if(by&&alive(by)){fx.rel[by]=fx.rel[by]||{};if(k==='harem'||k==='promote'||k==='appoint'||k==='ennoble'){fx.rel[by].af=3;fx.rel[by].tr=3;}}
+ try{applyFx(fx,'ai');}catch(e){}
+ /* 公開＋知情者反應 */
+ f.vis=Math.max(f.vis,(k==='master'||k==='register')?1:2);
+ try{if(f.vis>=2&&Facts.goPublic)Facts.goPublic(f,true);}catch(e){}
+ var rc=Idn.react(f,tgt,by,k);
+ /* 記錄 */
+ var post=null;try{post=Career.post();}catch(e){}
+ var head=(KINDS[k]||'身分變更')+'：'+from.title+' → '+cur.title;
+ lines.unshift(head+(by?'（'+nmx(by)+'批准）':''));
+ if(!tgt.keep&&post){lines.push('住處：'+(RES[cur.path]&&cur.spot==='chamber'?'後宮居所':placeStr())+'；職司：'+post.duty+'；俸祿加給 +'+post.sal+' 金/月');}
+ if(rc.length)lines.push.apply(lines,rc);
+ if(res)lines.forEach(function(l){res.lines.push(l);});
+ X_.last=lines.slice(0,3).join(' ');
+ addLog('〔身分變更〕'+head+(by?'，由'+nmx(by)+'批准':'')+'。');
+ try{addNews(S.p.name+'身分有變：'+cur.title+'。');}catch(e){}
+ try{if(window.Canon)Canon.note('玩家身分變更：'+from.title+'→'+cur.title+'（'+dateStr()+'）');}catch(e){}
+ try{if(window.Facts&&Facts.story)Facts.story('你的身分變為「'+cur.title+'」');}catch(e){}
+ try{HUD.update();}catch(e){}
+};
+/* 社交圖反應 */
+Idn.react=function(f,tgt,by,k){
+ var out=[],n=0;
+ var ids=Object.keys(f.kn).filter(function(K){return NPC[K]&&alive(K)&&K!==by&&f.kn[K]>=55;});
+ ids.sort(function(a,b){return NPC[b].tier-NPC[a].tier;});
+ for(var i=0;i<ids.length&&n<8;i++){
+  var K=ids[i],N=NPC[K],r=R(K);var line='';
+  var rival=(tgt.path==='consort'&&N.sex==='f'&&N.tier>=2&&locOf(K)===S.p.region&&K!=='zhaoji'&&!NPC[K].child);
+  if(k==='demote'||k==='leave'){
+   if(r.ha>=20||r.su>=40){addRel(K,'af',-1,null);line=N.n+'暗自冷笑：「樹倒猢猻散。」';}
+  }else if(rival){addRel(K,'su',5,null);addRel(K,'ha',2,null);line=N.n+'聽聞此事，神色一僵，眼底掠過妒意。';}
+  else if(N.amb>=65&&N.tier<=3){addRel(K,'af',3,null);addRel(K,'tr',1,null);line=N.n+'立刻換了副笑臉，言語間多了巴結之意。';}
+  else if(N.sus>=65||N.tier>=4){addRel(K,'su',4,null);line=N.n+'不動聲色，卻暗中留意你的一舉一動。';S.flags['watch_'+K]=S.day;}
+  if(line){n++;if(out.length<3)out.push(line);}
+ }
+ return out;
+};
+/* ---------- 離線自由輸入辨識 ---------- */
+var INTENT=/想|欲|打算|希望|可否|能否|是否|如果|若是|要是|不想|能不能|可不可以/;
+var DONE=/準了|准了|允了|批了|同意了?|答應了?|應允|恩准|首肯|獲准|下詔|詔書|冊封|封為|已將|任命|晉升|升任|升為|提拔|貶為|貶謫|革職|免職|逐出|放出|遣出/;
+Idn.parseText=function(raw){
+ var t=String(raw||'').replace(/\s+/g,'');if(t.length<4)return null;
+ var k='',to='';var m;
+ if(/(後宮|為妃|為嬪|入宮為|選入宮|納為妃|冊封為?(?:少使|長使|八子|良人|夫人|美人))/.test(t)&&/收|納|選|召|迎|冊|封|入|進|許/.test(t)&&!/出後宮|離開後宮|逐出/.test(t)){k='harem';m=t.match(/(少使|長使|八子|良人|夫人|美人)/);to=m?m[1]:'';}
+ else if(/(出宮|放出宮|遣出宮|逐出宮|離宮|放歸|遣返|廢為庶人|廢黜|革去.{0,4}位|被逐|辭官|去職)/.test(t)){k='leave';}
+ else if(/(貶為|貶謫|貶黜|降為|降職|革職|免職|撤職|罷官|降級|降位)/.test(t)){k='demote';m=t.match(/(?:貶為|降為)([^，。；]{1,6})/);to=m?m[1]:'';}
+ else if(/(封侯|封君|封為[^，。；]{0,3}[君侯]|賜爵|晉爵|封爵|拜爵)/.test(t)){k='ennoble';}
+ else if(/(入伍|從軍|投軍|參軍|編入行伍|充軍)/.test(t)){k='enlist';}
+ else if(/(拜[^，。；]{1,6}為師|收我為徒|收為弟子|收我為弟子|拜師)/.test(t)){k='master';}
+ else if(/(改籍|入籍|除奴籍|脫奴籍|賜良籍|免為庶人|編入戶籍)/.test(t)){k='register';}
+ else if(/(升任|升為|晉升|晉為|提拔|擢升|拔擢|任為|任命為|授為|封為|拜為|升官|升遷|(?:升|晉|任|授|封|拜|提拔|任命)(?:我|你|她|他)為)/.test(t)){
+  k='promote';m=t.match(/(?:升任|升為|晉升為?|晉為|提拔為?|擢升為?|拔擢為?|任為|任命為|授為|封為|拜為|(?:升|晉|任|授|封|拜|提拔|任命)(?:我|你|她|他)為)([^，。；]{1,8})/);to=m?m[1]:'';
+  var rt=Idn.target({k:'promote',to:to});if(rt&&rt.path!==S.p.path)k='appoint';
+ }
+ if(!k)return null;
+ var ms=Facts.mentions(t);
+ var ap=false,by='';
+ var am=t.match(/([^，。；]{1,10}?)(?:準了|准了|允了|批了|同意了?|答應了?|應允|恩准|首肯|點了頭|獲准)/);
+ if(am){ap=true;var ams=Facts.mentions(am[1]);if(ams.length)by=ams[ams.length-1].id;}
+ if(!ap&&DONE.test(t))ap=true;
+ if(INTENT.test(t)&&!ap)return null;
+ if(!by){var cand=ms.filter(function(x){return NPC[x.id];});if(cand.length)by=cand[0].id;}
+ if(k==='master'||k==='register'||k==='enlist')ap=true;
+ var kn=[];ms.forEach(function(x){if(kn.length<4&&alive(x.id))kn.push(x.id);});
+ return {type:'status',subject:'p',object:by||'',kin:'other',text:S.p.name+(KINDS[k]?'：'+KINDS[k]:'')+'——'+t.slice(0,60),vis:'public',knownBy:kn,proof:'none',mag:2,change:{k:k,to:to,by:by,ap:ap?1:0}};
+};
+var _fp=Facts.parse;
+Facts.parse=function(text){
+ var out=_fp(text)||[];
+ try{var e=Idn.parseText(text);if(e){out=[e].concat(out.filter(function(x){return !(x&&x.change);})).slice(0,3);}}catch(err){if(window.console)console.error('Idn.parse',err);}
+ return out;
+};
+/* ---------- AI 提示 ---------- */
+Idn.aiRule=function(){
+ return '【身分變更】若劇情中玩家的身分確實改變（入後宮、升遷、貶謫、出宮、入伍、任官、封爵、拜師、改籍），請在 effects 加一項 {"type":"status","subject":"p","object":"批准者npc_id","text":"事件描述","vis":"public","change":{"k":"harem|promote|demote|leave|enlist|appoint|ennoble|master|register","to":"目標階名或路徑","by":"批准者npc_id","ap":1}}。遊戲會按難度與條件（批准者地位、熟識、聖寵、聲望、在場）驗證，成立才正式更新路線／位份／住處／俸祿與可用選項；不成立時請改寫為「尚未得到批准」。可用階梯——'+Idn.ladder()+'。';
+};
+var _wr=AI.worldRules;
+AI.worldRules=function(short){
+ var t=_wr(short);
+ try{t+=short?'【身分變更】身分確實改變時，effects 加 change:{k,to,by,ap:1}（k：harem/promote/demote/leave/enlist/appoint/ennoble/master/register）。':Idn.aiRule();}catch(e){}
+ return t;
+};
+/* ---------- UI：角色面板 ---------- */
+Idn.panelHTML=function(){
+ var h=X().hist;if(!h||!h.length)return '';
+ var s='<div class="sec"><h4>身分變更記錄</h4>';
+ for(var i=h.length-1;i>=Math.max(0,h.length-4);i--){var e=h[i];s+='<div class="mem">'+esc(dateStr(e.d))+'　'+esc(KINDS[e.k]||e.k)+'：'+esc(e.from.title||'')+' → '+esc((PATHS[e.to.path]?PATHS[e.to.path].ranks[e.to.rank]:'')||'')+(e.by?'（'+esc(nmx(e.by))+'）':'')+'</div>';}
+ return s+'</div>';
+};
+var _ps=PANELS.stats;
+PANELS.stats=function(){var h=_ps();try{h+=Idn.panelHTML();}catch(e){}return h;};
 })();
 
 /* ---- 99_boot.js ---- */
