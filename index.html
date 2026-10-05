@@ -433,6 +433,18 @@ body.land:not(.hubmode) #bottom{max-height:calc(var(--vh)*40)!important;}
  #hudpw{width:44px;height:44px}
 }
 
+/* ---- 全屏輸入面板（iOS 鍵盤穩定方案：不依賴底部 fixed 定位，面板貼著可視視窗頂端）---- */
+#kbp{display:none;position:fixed;left:0;right:0;top:var(--vvt,0px);height:var(--vvh,100%);z-index:200;background:rgba(3,5,9,.94);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);overflow:hidden;overscroll-behavior:none;}
+#kbp.on{display:-webkit-flex;display:flex;-webkit-align-items:flex-start;align-items:flex-start;-webkit-justify-content:center;justify-content:center;}
+#kbbox{width:100%;max-width:560px;max-height:100%;box-sizing:border-box;padding:calc(14px + env(safe-area-inset-top,0px)) 14px 12px;display:-webkit-flex;display:flex;flex-direction:column;gap:10px;}
+#kbctx{max-height:22vh;max-height:calc(var(--vvh,100vh)*.26);overflow:hidden;font-size:13px;line-height:1.55;color:var(--dim);white-space:pre-wrap;border-left:2px solid var(--ln);padding:2px 0 2px 10px;}
+#kbctx:empty{display:none;}
+#kbta{width:100%;box-sizing:border-box;min-height:84px;max-height:calc(var(--vvh,100vh)*.5);padding:12px 14px;border-radius:14px;font-size:16px!important;line-height:1.5;color:var(--ink);background:rgba(10,13,20,.96);border:1px solid var(--jade);box-shadow:0 0 0 3px rgba(98,214,192,.18);resize:none;outline:0;-webkit-appearance:none;appearance:none;font-family:inherit;}
+#kbrow{display:-webkit-flex;display:flex;gap:8px;align-items:center;}
+#kbcnt{margin-right:auto;font-size:12px;color:var(--dim);}
+#kbrow .gobtn{min-width:76px;}
+body.kbopen #toast{display:none!important;}
+
 /* ===== MUD 介面 ===== */
 :root{--mfont:"Sarasa Mono TC","Noto Sans Mono CJK TC","Source Han Mono TC","Cascadia Mono","SF Mono","Menlo","Consolas","PingFang TC","Microsoft JhengHei","Noto Sans TC",monospace;--mfs:16px}
 body.mt-green{--mbg:#040a05;--mbg2:#08140a;--mfg:#8fe39a;--mdim:#3f7a49;--mbd:#1d4a28}
@@ -607,6 +619,7 @@ body.mud .cbtn{background:transparent;border:1px solid var(--mdim);color:var(--m
  </div>
  <div id="aibar" role="status"><span id="aibarmsg"></span><button id="aibargo" class="aibtn" data-bar="set">⚙ 去設定</button><button id="aibarx" class="aibtn" data-bar="x" aria-label="關閉">✕</button></div>
 </div>
+<div id="kbp" aria-hidden="true"><div id="kbbox" role="dialog" aria-label="自由輸入"><div id="kbctx"></div><textarea id="kbta" rows="3" maxlength="120" placeholder="自由輸入你想做的事…" enterkeyhint="send" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"></textarea><div id="kbrow"><span id="kbcnt">0/120</span><button type="button" class="gobtn dark" id="kbcancel">取消</button><button type="button" class="gobtn" id="kbsend">行動</button></div></div></div>
 <div id="mud" aria-label="MUD 文字介面">
  <div id="mtop"><div id="mt1"></div><div id="mt2"></div><button type="button" id="mpanelbtn" title="側欄（狀態／地圖）">☰</button><button type="button" id="mmenubtn" title="選單／設定">⚙</button></div>
  <div id="mmain">
@@ -18689,6 +18702,73 @@ var Pace={};
  AI.summary=function(){var s=_sm.apply(this,arguments);try{var met=[];for(var k in S.rel){if(S.rel[k].met>0&&NPC[k]&&alive(k))met.push(nmx(k));}s+='\n【相識名單】已與玩家相識：'+(met.slice(0,16).join('、')||'無')+'（其餘人物皆不認識玩家，須先有初遇事件）。';}catch(e){}return s;};
  /* 診斷用 */
  Pace.report=function(){var p=P();return {g:p.g,gcd:Pace.gcd(),ncd:Pace.ncd(),def:p.def.length,stat:p.stat,met:Object.keys(S.rel).filter(function(k){return S.rel[k].met>0&&NPC[k];}).length};};
+})();
+
+/* ---- 68_kbpanel.js ---- */
+/* ===== 秦風 · 全屏輸入面板（Kb）：觸控裝置點自由輸入框 → 彈出覆蓋層（textarea 16px），不依賴底部 fixed 定位 ===== */
+var Kb={open:false};
+(function(){
+ function el(i){return document.getElementById(i);}
+ Kb.on=function(){return !!(window.VV&&VV.coarse());};
+ Kb.ctx=function(){
+  try{var t=(window.UIs&&UIs.shown&&UIs.shown.t)||'';t=String(t).replace(/\s+/g,' ').trim();return t.length>60?'…'+t.slice(-60):t;}catch(e){return '';}
+ };
+ function count(){var ta=el('kbta'),c=el('kbcnt');if(ta&&c)c.textContent=ta.value.length+'/'+(ta.maxLength>0?ta.maxLength:120);}
+ Kb.show=function(){
+  var p=el('kbp'),ta=el('kbta'),f=el('free');if(!p||!ta||Kb.open)return;
+  Kb.open=true;ta.value=f?f.value:'';el('kbctx').textContent=Kb.ctx();count();
+  document.body.classList.add('kbopen');p.className='on';p.setAttribute('aria-hidden','false');
+  try{VV.apply();}catch(e){}
+  try{ta.focus();var n=ta.value.length;ta.setSelectionRange(n,n);}catch(e2){}
+ };
+ Kb.close=function(keep){
+  var p=el('kbp'),ta=el('kbta'),f=el('free');if(!p||!Kb.open)return;
+  Kb.open=false;if(keep&&f)f.value=ta.value;
+  p.className='';p.setAttribute('aria-hidden','true');document.body.classList.remove('kbopen');
+  try{ta.blur();}catch(e){}
+  try{window.scrollTo(0,0);}catch(e2){}
+  try{VV.kick();}catch(e3){}
+  setTimeout(function(){if(!Kb.open){try{window.scrollTo(0,0);}catch(e){}try{VV.apply();}catch(e2){}}},350);   /* 主畫面（standalone）收鍵盤後 iOS 有時殘留捲動 */
+ };
+ Kb.send=function(){
+  var ta=el('kbta'),f=el('free');if(!ta||!f)return;
+  var v=ta.value;f.value=v;Kb.close(false);
+  if(v.replace(/\s+/g,'')){try{SND.init();}catch(e){}submitFree();}
+ };
+ /* 觸控裝置：#free 唯讀（不彈鍵盤）＋點擊開面板 */
+ Kb.sync=function(){
+  var f=el('free');if(!f)return;
+  if(Kb.on()){f.setAttribute('readonly','readonly');f.setAttribute('inputmode','none');}
+  else{f.removeAttribute('readonly');f.removeAttribute('inputmode');}
+ };
+ Kb.focusFree=function(){if(Kb.on())Kb.show();else{var f=el('free');if(f)try{f.focus();}catch(e){}}};
+ Kb.standalone=function(){try{return !!(navigator.standalone||(window.matchMedia&&window.matchMedia('(display-mode: standalone)').matches));}catch(e){return false;}};
+ Kb.init=function(){
+  if(Kb.inited)return;var p=el('kbp'),ta=el('kbta'),f=el('free');if(!p||!ta||!f)return;Kb.inited=1;
+  Kb.sync();if(Kb.standalone())document.body.classList.add('standalone');
+  f.addEventListener('click',function(e){if(Kb.on()){e.preventDefault();Kb.show();}});
+  f.addEventListener('focus',function(){if(Kb.on()&&!Kb.open){try{f.blur();}catch(e){}Kb.show();}});
+  el('kbsend').addEventListener('click',function(e){e.preventDefault();Kb.send();});
+  el('kbcancel').addEventListener('click',function(e){e.preventDefault();Kb.close(true);});
+  p.addEventListener('click',function(e){if(e.target===p)Kb.close(true);});
+  ta.addEventListener('input',count);
+  ta.addEventListener('keydown',function(e){
+   if(e.isComposing||e.keyCode===229)return;                 /* 注音／倉頡／拼音選字中的 Enter 不送出 */
+   if((e.key==='Enter'||e.keyCode===13)&&!e.shiftKey){e.preventDefault();Kb.send();}
+   else if(e.key==='Escape'){Kb.close(true);}
+  });
+  /* 面板開著時，頁面不可被推動 */
+  p.addEventListener('touchmove',function(e){if(e.target===p||e.target.id==='kbbox')e.preventDefault();},{passive:false});
+  try{window.matchMedia&&window.matchMedia('(pointer:coarse)').addListener&&window.matchMedia('(pointer:coarse)').addListener(Kb.sync);}catch(e){}
+ };
+ /* 開啟短螢幕輸入列時，改為開面板 */
+ if(window.V2&&V2.toggleFb){var _tf=V2.toggleFb;V2.toggleFb=function(on){_tf(on);try{if(Kb.on()){var f=el('free');if(f)f.blur();if(hasFb())Kb.show();}}catch(e){}};}
+ function hasFb(){return document.body.classList.contains('fbopen');}
+ /* 啟動時初始化（DOM 已就緒後） */
+ var _bind=bindUI;
+ bindUI=function(){_bind();try{Kb.init();}catch(e){if(window.console)console.error('Kb',e);}};
+ /* 面板開著時，讀檔／返回主選單要收起 */
+ var _lo=loadObj;loadObj=function(o){if(Kb.open)Kb.close(false);return _lo(o);};
 })();
 
 /* ---- 99_boot.js ---- */
