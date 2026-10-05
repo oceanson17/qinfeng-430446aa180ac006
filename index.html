@@ -20282,6 +20282,307 @@ var Seal=window.Seal={};
  Seal.report=function(){var n=0,s=0;try{var L=Facts.F().list;for(var i=0;i<L.length;i++){if(L[i].seal){for(var k in L[i].seal)s++;n++;}}}catch(e){}return {facts:n,seals:s,stat:Facts.stat||{}};};
 })();
 
+/* ---- 75_idcmd.js ---- */
+/* ===== 秦風 · 身分強化＋NPC 命令驅動（IdBoost／Ncmd）===== */
+(function(){
+ /* ---------- 1) 身分：解析強化＋全遊戲同步 ---------- */
+ if(window.Idn){
+  /* 位份別名補全 */
+  var EX2={'妃子':['consort',0],'貴妃':['consort',3],'貴人':['consort',1],'昭儀':['consort',2],'皇后':['consort',4],'王后':['consort',4],'姬妾':['consort',0],'侍妾':['consort',0],'側妃':['consort',1]};
+  var _tgt=Idn.target;
+  Idn.target=function(chg){
+   if(chg&&chg.to){
+    var s=String(chg.to);
+    for(var nm in EX2){if(s.indexOf(nm)>=0){var t={path:EX2[nm][0],rank:EX2[nm][1],named:1};if(chg.k==='harem'||!chg.k)return t;}}
+   }
+   var r=_tgt(chg);
+   if(r&&chg&&chg.to){
+    for(var n2 in EX2){if(String(chg.to).indexOf(n2)>=0&&r.path==='consort'){r.rank=EX2[n2][1];r.named=1;}}
+   }
+   return r;
+  };
+
+  Idn.syncAll=function(){
+   try{S.p.title=titleOf();}catch(e){}
+   try{if(window.Career&&Career.sync)Career.sync();else if(window.Career&&S.car)S.car.via=S.car.via||'身分';}catch(e2){}
+   try{if(typeof HUD!=='undefined'&&HUD.update)HUD.update();}catch(e3){}
+   try{if(window.V2&&V2.layout)V2.layout();}catch(e4){}
+   try{
+    var post=Career&&Career.post?Career.post():null;
+    var line='身分：'+S.p.title+'｜'+placeStr()+(post?'｜'+post.duty+'｜俸＋'+post.sal:'');
+    if(window.Nom){for(var id in (S.rel||{})){if(R(id).met)Nom.remember(id,'得知'+S.p.name+'現為'+S.p.title,{k:'fact'});}}
+   }catch(e5){}
+  };
+
+  var _ap=Idn.apply;
+  Idn.apply=function(chg,f,o,res){
+   _ap(chg,f,o,res);
+   try{
+    Idn.syncAll();
+    var by=chg&&chg.by?Facts.resolve(chg.by):'';
+    if(by&&NPC[by]){
+     try{addMem(by,S.p.name+'身分變為'+S.p.title);}catch(e){}
+     try{if(window.Bond&&Bond.on())Bond.note(by,'促成／知曉'+S.p.name+'成為'+S.p.title);Bond.feelDelta(by,{re:2,af:1},'身分變更');}catch(e2){}
+     try{if(window.Nom)Nom.remember(by,S.p.name+'現為'+S.p.title,{k:'told',crit:1});}catch(e3){}
+    }
+   }catch(e4){}
+  };
+
+  /* 解析：「嬴政想我當他妃子」——君上／重臣「想／要」視為批准意願 */
+  function softBy(t){
+   var ms=[];try{ms=Facts.mentions(t);}catch(e){}
+   /* 僅在句中確有人名時取批准者；玩家自己「我想」不算 */
+   if(!ms.length)return '';
+   var prefer=ms.filter(function(x){return NPC[x.id]&&(x.id===S.emp||NPC[x.id].tier>=4);});
+   if(prefer.length)return prefer[0].id;
+   return ms[0].id;
+  }
+  function rankWord(t){
+   var m=t.match(/(皇后|王后|夫人|貴妃|昭儀|良人|八子|美人|長使|少使|妃子|貴人|側妃|姬妾|侍妾|妃|嬪)/);
+   return m?m[1]:'';
+  }
+  var _pt=Idn.parseText;
+  Idn.parseText=function(raw){
+   var e=_pt(raw);
+   var t=String(raw||'').replace(/\s+/g,'');
+   /* 補強已解析結果的 to／by */
+   if(e&&e.change){
+    if(!e.change.to){var rw=rankWord(t);if(rw)e.change.to=rw;}
+    if(!e.change.by){var b0=softBy(t);if(b0)e.change.by=b0;}
+    /* 已在後宮再說當夫人 → 升遷 */
+    if(e.change.k==='harem'&&S.p.path==='consort'&&e.change.to&&/夫人|良人|八子|貴妃|昭儀/.test(e.change.to))e.change.k='promote';
+    return e;
+   }
+   /* 新：君王／重臣欲納為妃 */
+   if(!/(後宮|妃子|妃|嬪|夫人|美人|良人|八子|長使|少使|貴妃|納妃|冊妃)/.test(t))return null;
+   if(/(出後宮|逐出|廢黜|貶)/.test(t))return null;
+   var want=/(想|要|欲|打算|希望).{0,8}(當|為|做|收|納)|收.{0,4}(為|做|當)|納.{0,4}(為|做)|冊封|封為|選為|立為/.test(t);
+   if(!want&&!/(收入後宮|入後宮|進後宮)/.test(t))return null;
+   /* 玩家單方意願（我想進後宮）無批准者不成立 */
+   if(/^我/.test(t)&&!/(準了|准了|允了|批了|同意|太后|大王|嬴政|相邦)/.test(t))return null;
+   var by=softBy(t);var to=rankWord(t);
+   var ap=0;
+   if(/準了|准了|允了|批了|同意|答應|應允|恩准|首肯|獲准|下詔|冊封|封為|已將/.test(t))ap=1;
+   /* 君上／太后／重臣親口「想／要我當…」＝批准意願 */
+   if(by&&NPC[by]&&(by===S.emp||by===S.reg||NPC[by].tier>=4)&&/(想|要|欲).{0,12}(我|你)/.test(t))ap=1;
+   if(!ap||!by)return null;
+   var k='harem';
+   if(S.p.path==='consort'&&to&&/夫人|良人|八子|貴妃|昭儀|長使/.test(to))k='promote';
+   var kn=[];try{Facts.mentions(t).forEach(function(x){if(kn.length<4&&alive(x.id))kn.push(x.id);});}catch(e2){}
+   if(by&&kn.indexOf(by)<0)kn.unshift(by);
+   return {type:'status',subject:'p',object:by||'',kin:'other',text:S.p.name+'：'+(k==='promote'?'升遷':'入後宮')+'——'+t.slice(0,60),vis:'public',knownBy:kn,proof:'none',mag:2,change:{k:k,to:to,by:by,ap:1}};
+  };
+
+  /* AI 規則補一句 */
+  var _ar=Idn.aiRule;
+  if(_ar)Idn.aiRule=function(){return _ar()+' 亦可辨識「嬴政想我當妃子／夫人」等：君上或太后親口意願視同批准。成立後必須同步路線、位份、住處、俸祿、選項與面板顯示。';};
+ }
+
+ /* ---------- 2) NPC 命令驅動 ---------- */
+ var Ncmd=window.Ncmd={};
+ DEFSET.ncmd=true;
+ (function(){var i;for(i=0;i<SETSCHEMA.length;i++){if(SETSCHEMA[i][0]==='actd'||SETSCHEMA[i][0]==='seald')break;}
+  if(i>=SETSCHEMA.length)i=SETSCHEMA.length;
+  SETSCHEMA.splice(i,0,['ncmd','check','NPC 命令驅動（「呂不韋命人殺太后」等，寫入任務／記憶）']);})();
+ function on(){return SET.ncmd!==false;}
+ Ncmd.on=on;
+ function store(){var x=X();if(!x.ncmd)x.ncmd={ver:1,list:[],seq:1};if(!x.ncmd.list)x.ncmd.list=[];return x.ncmd;}
+
+ var VERBS=[
+  {k:'kill',re:/殺害|殺死|刺殺|幹掉|拿刀殺|刀殺|弒|誅|除掉|除去|滅口|結果了/,lab:'殺'},
+  {k:'arrest',re:/拿下|鎖拿|逮捕|拘押|下獄|囚禁|抓起來|拿問/,lab:'拿捕'},
+  {k:'poison',re:/毒殺|下毒|毒死|毒害/,lab:'毒殺'},
+  {k:'watch',re:/監視|盯著|探查|偵察|跟蹤|暗中察/,lab:'監視'},
+  {k:'summon',re:/召見|叫來|帶來|押來|請來/,lab:'召來'},
+  {k:'silence',re:/封口|滅口|讓.+閉嘴|不許說/,lab:'封口'},
+  {k:'protect',re:/保護|護住|守護|救/,lab:'保護'},
+  {k:'gift',re:/送禮|送上|獻/,lab:'送禮'}
+ ];
+
+ Ncmd.parse=function(text){
+  if(!on()||!text)return null;
+  var raw=String(text).replace(/\s+/g,' ').slice(0,200);
+  var t=raw.replace(/\s+/g,'');
+  /* 必須有「命／令／吩咐／派人／差」等下令痕跡 */
+  if(!/(命人|派人|差人|授意|指使|命令)/.test(t)&&!/(命|令|吩咐|差|派|授意|指使|教|讓|要)我/.test(t)&&!/(命|令|吩咐).{0,6}(人|手下|門客|死士|刺客|你)/.test(t)&&!/(要|命|令|派|教|讓).{0,4}(去|把|將)/.test(t))return null;
+  /* 排除玩家自傷等 Act 優先 */
+  if(window.Act&&Act.isCmd&&Act.isCmd(raw)&&/自刺|自刎|出示|逃跑|下跪/.test(t))return null;
+  var verb=null;
+  for(var i=0;i<VERBS.length;i++){if(VERBS[i].re.test(t)){verb=VERBS[i];break;}}
+  if(!verb)return null;
+  function aliasId(s){
+   if(/華陽/.test(s))return 'huayang';
+   if(/夏太/.test(s))return 'xiatai';
+   if(/太后|趙姬/.test(s))return 'zhaoji';
+   if(/大王|秦王|嬴政|陛下/.test(s))return 'yingzheng';
+   if(/相邦|呂不韋|呂氏/.test(s))return 'lbw';
+   if(/李斯/.test(s))return 'lisi';
+   return '';
+  }
+  var ids=[];try{ids=mentioned(t);}catch(e){ids=[];}
+  /* 下令者／目標：別名優先 */
+  var from='',to='';
+  var am=t.match(/^(.{1,8}?)(?:命人|派人|差人|命令|命|令|吩咐|要我|命我|令我|派我|教我|讓我)/);
+  if(am){from=aliasId(am[1]);if(!from){try{var a1=mentioned(am[1]);if(a1.length)from=a1[0];}catch(e0){}}}
+  if(!from&&ids.length)from=ids[0];
+  var tm=t.match(/(?:殺|刺|毒|拿|抓|捕|監視|監|召|護|滅|除|結果|盯)(?:死|害|掉|下|住|視|見|口|著)?(.{1,8}?)(?:$|，|。|！)/);
+  if(tm){to=aliasId(tm[1]);if(!to){try{var tid=mentioned(tm[1]);if(tid.length)to=tid[0];}catch(e2){}}}
+  if(!to){for(var ii=0;ii<ids.length;ii++){if(ids[ii]!==from){to=ids[ii];break;}}}
+  if(!to){to=aliasId(t);}
+  if(!from||!to)return null;
+  if(from===to&&ids.length>=2){to=ids[ids.length-1];if(to===from)to=ids[0];}
+  /* 「命我」→ 命令對象是玩家 */
+  var onPlayer=/命我|令我|吩咐我|要我|派我|教我|讓我/.test(t);
+  var viaMinion=/命人|派人|差人|命手下|派門客|派死士|派刺客/.test(t);
+  return {k:verb.k,lab:verb.lab,from:from,to:to,onPlayer:onPlayer?1:0,viaMinion:viaMinion?1:0,raw:raw,body:t.slice(0,80)};
+ };
+
+ Ncmd.willObey=function(from,cmd){
+  /* 下令者是否真會執行此令（性格／關係／難度） */
+  var n=NPC[from];if(!n||!alive(from))return {do:0,why:'已故或不存在'};
+  var r=R(cmd.to),rel=NR?null:null;
+  var hate=0;try{if(typeof NR==='function'){var nr=NR(from,cmd.to);hate=(nr.ha||0)+(nr.su||0)/2;}else hate=(R(from).ha||0);}catch(e){hate=R(from).ha||0;}
+  var lean='neutral';try{if(window.Bond)lean=Bond.leanOf(from);}catch(e2){}
+  var d=SET.diff||'normal';
+  var base=40+(n.cru||30)/3+(n.amb||30)/5+hate/2;
+  if(cmd.k==='kill'||cmd.k==='poison'){base+=n.cru>=60?15:-10;if(n.hon>=70)base-=25;if(cmd.to===S.emp||cmd.to==='zhaoji'&&from!==S.emp)base-=20;}
+  if(lean==='hurt'&&cmd.to==='p')base+=20;
+  if(d==='easy')base+=15;if(d==='hell')base-=10;
+  base=clamp(base,5,92);
+  var rollv=rand()*100;
+  if(rollv<base*0.35)return {do:2,why:'決意執行',p:base}; /* 真做 */
+  if(rollv<base)return {do:1,why:'陽奉陰違',p:base};
+  return {do:0,why:'拒絕／推託',p:base};
+ };
+
+ Ncmd.reactPresent=function(cmd){
+  var lines=[],ids=[];
+  try{ids=(window.Act&&Act.present)?Act.present(cmd.from):hereNpcs().filter(function(id){return spotOf(id)===S.p.spot;}).slice(0,4);}catch(e){ids=[];}
+  if(ids.indexOf(cmd.from)<0)ids.unshift(cmd.from);
+  ids.slice(0,4).forEach(function(id){
+   if(!NPC[id]||!alive(id))return;
+   if(id===cmd.from){lines.push(NPC[id].n+'沉聲下令：「'+cmd.lab+nm(cmd.to)+'。」');return;}
+   if(id===cmd.to){lines.push(NPC[id].n+'臉色驟變。');return;}
+   var st='旁觀';try{if(window.Bond&&Bond.leanOf(id)==='protect'&&(id===cmd.to||cmd.to==='p'))st='阻攔';
+    else if(R(id).ha>=30)st='煽風';else if(NPC[id].hon>=65)st='勸阻';}catch(e2){}
+   if(st==='阻攔')lines.push(NPC[id].n+'上前阻攔：「不可！」');
+   else if(st==='勸阻')lines.push(NPC[id].n+'勸道：「此事萬萬使不得。」');
+   else if(st==='煽風')lines.push(NPC[id].n+'袖手旁觀，似有期待。');
+   else lines.push(NPC[id].n+'聞言一驚，卻不敢多言。');
+  });
+  return lines;
+ };
+
+ Ncmd.record=function(cmd,verdict,extra){
+  var st=store();
+  var e={i:st.seq++,d:S.day,k:cmd.k,lab:cmd.lab,from:cmd.from,to:cmd.to,onPlayer:cmd.onPlayer,via:cmd.viaMinion,verdict:verdict.do,why:verdict.why,raw:cmd.body};
+  st.list.push(e);if(st.list.length>40)st.list.shift();
+  try{addLog('〔命令〕'+nm(cmd.from)+'令'+(cmd.onPlayer?'你':(cmd.viaMinion?'人':''))+cmd.lab+nm(cmd.to)+'——'+verdict.why);}catch(e0){}
+  try{addMem(cmd.from,'下令'+cmd.lab+nm(cmd.to)+'（'+verdict.why+'）');}catch(e1){}
+  try{if(window.Bond&&Bond.on()){Bond.note(cmd.from,'曾下令'+cmd.lab+nm(cmd.to));if(cmd.k==='kill')Bond.feelDelta(cmd.from,{ha:2},'殺心');}}catch(e2){}
+  try{if(window.Nom){Nom.remember(cmd.from,'下令：'+cmd.lab+nm(cmd.to),{k:'dlg',crit:1});if(alive(cmd.to))Nom.remember(cmd.to,nm(cmd.from)+'意圖'+cmd.lab+'自己',{k:'secret',crit:1});}}catch(e3){}
+  /* 任務：命我執行 */
+  if(cmd.onPlayer){
+   addQuest({id:'ncmd_'+e.i,t:nm(cmd.from)+'之令：'+cmd.lab+nm(cmd.to),d:nm(cmd.from)+'命你'+cmd.lab+nm(cmd.to)+'。可遵從、陽奉陰違或拒絕——後果自負。',giver:cmd.from,due:S.day+30});
+  }
+  /* 事件線程輕記 */
+  try{if(window.Thread&&Thread.note)Thread.note(cmd.from,cmd.lab+nm(cmd.to));
+   else if(window.Thread&&Thread.memLines){/* skip */}}catch(e4){}
+  /* 知情：僅下令者、目標、在場者——不全民 */
+  try{
+   if(window.Facts){
+    var kn=[cmd.from];if(cmd.to&&cmd.to!=='p')kn.push(cmd.to);
+    try{var pr=Act.present(cmd.from);pr.forEach(function(id){if(kn.indexOf(id)<0)kn.push(id);});}catch(e5){}
+    Facts.ingest([{type:'event',subject:cmd.from,object:cmd.to==='p'?'p':cmd.to,kin:'other',text:nm(cmd.from)+'意圖'+cmd.lab+(cmd.to==='p'?S.p.name:nm(cmd.to)),vis:'secret',knownBy:kn.slice(0,4),mag:cmd.k==='kill'?2:1}],{src:'free',force:1});
+   }
+  }catch(e6){}
+  return e;
+ };
+
+ Ncmd.resolveOffline=function(cmd){
+  var v=Ncmd.willObey(cmd.from,cmd);
+  var reacts=Ncmd.reactPresent(cmd);
+  var narr='你耳聞／目睹：'+cmd.body.slice(0,70)+'。\n';
+  reacts.forEach(function(l){narr+=l+'\n';});
+  var fx={days:0,st:{},rel:{}};
+  if(v.do===2&&!cmd.onPlayer&&(cmd.k==='kill'||cmd.k==='poison')&&cmd.to&&cmd.to!=='p'&&alive(cmd.to)){
+   /* 真執行：目標重傷或標記危機，不直接秒殺帝／太后於易難度 */
+   var n=NPC[cmd.to];
+   if(n.tier>=4&&SET.diff!=='hell'){narr+=nm(cmd.from)+'雖已下令，左右面面相覷，一時無人敢動手。\n';v.why='左右不敢動手';v.do=1;}
+   else{
+    fx.rel[cmd.to]={fe:10,ha:4};narr+=nm(cmd.to)+'陷入危局（'+v.why+'）。\n';
+    S.flags['ncmd_threat_'+cmd.to]=S.day;
+   }
+  }else if(v.do===1){narr+=nm(cmd.from)+'話音落下，屬下卻只是應著，並未真正動手（陽奉陰違）。\n';}
+  else{narr+=nm(cmd.from)+'的命令遭到推託：「此事……恐怕不妥。」\n';}
+  if(cmd.onPlayer)narr+='\n（你收到任務：執行或抗命。見「任務」面板。）\n';
+  var o=applyFx(fx);
+  Ncmd.record(cmd,v);
+  narr+=fxLine(o);
+  return {t:'【命令・'+cmd.lab+'】\n'+narr,sp:cmd.from,bg:S.p.spot,kind:'event',ch:[ch('……','hub'),ch('查看任務','ui',{u:'quest'})],_ncmd:1};
+ };
+
+ Ncmd.aiBlock=function(cmd){
+  if(!cmd)return '';
+  return '\n◆NPC 命令（硬規則）：劇情中 '+NPC[cmd.from].n+' 正對'+(cmd.onPlayer?'玩家':nm(cmd.to))+'下達「'+cmd.lab+'」之令（'+cmd.body.slice(0,60)+'）。'+
+   '須寫出下令場景與在場反應；是否真執行須符合性格與利害（可決意執行／陽奉陰違／拒絕）。'+
+   '知情範圍僅限下令者、對象與在場者，禁止無故傳遍全城。effects 可用 quest 記錄「命玩家執行」。';
+ };
+
+ /* 掛鉤自由輸入：Act 之後、普通 free 之前 */
+ var _ft=NODES.freeText;
+ NODES.freeText=function(a){
+  var t=String((a&&a.text)||'');
+  if(on()){
+   var cmd=Ncmd.parse(t);
+   if(cmd){
+    Ncmd._pend=cmd;
+    if(SET.ai&&AI.ready()){
+     return {t:'……',sp:'',bg:S.p.spot,kind:'loading',ch:[],async:{type:'free',text:t,fb:{go:'ncmdOffline',a:{text:t}}}};
+    }
+    return Ncmd.resolveOffline(cmd);
+   }
+  }
+  return _ft(a);
+ };
+ NODES.ncmdOffline=function(a){
+  var cmd=Ncmd._pend||Ncmd.parse((a&&a.text)||'');
+  Ncmd._pend=null;
+  if(cmd)return Ncmd.resolveOffline(cmd);
+  return NODES.freeOffline(a);
+ };
+
+ var _um=AI.userMsg;
+ AI.userMsg=function(a){
+  var msg=_um(a);
+  try{if(on()&&Ncmd._pend)msg+=Ncmd.aiBlock(Ncmd._pend);
+   else if(on()&&a&&a.text){var c=Ncmd.parse(a.text);if(c)msg+=Ncmd.aiBlock(c);}}catch(e){}
+  return msg;
+ };
+ var _wr=AI.worldRules;
+ AI.worldRules=function(short){
+  var t=_wr(short);
+  try{if(on())t+=short?'【NPC命令】「X命人殺Y／命我……」須寫下令與反應，知情範圍受限。':'【NPC 命令驅動】玩家可描述他人下令（如「呂不韋命人拿刀殺太后」「嬴政要我監視李斯」）。解析下令者、命令、目標；寫入任務／記憶；在場反應；按性格與難度決意執行、陽奉陰違或拒絕。禁止無故全民知情。';}catch(e){}
+  return t;
+ };
+ var _run=AI.run;
+ AI.run=function(a){
+  return _run(a).then(function(sc){
+   try{
+    if(on()&&Ncmd._pend&&sc){
+     var cmd=Ncmd._pend;var v=Ncmd.willObey(cmd.from,cmd);
+     Ncmd.record(cmd,v);
+     if(sc.t&&sc.t.indexOf(cmd.lab)<0)sc.t+='\n'+Ncmd.reactPresent(cmd).slice(0,2).join('\n');
+     Ncmd._pend=null;
+    }
+   }catch(e){Ncmd._pend=null;}
+   return sc;
+  },function(err){Ncmd._pend=null;throw err;});
+ };
+
+ Ncmd.report=function(){return {n:store().list.length,last:store().list.slice(-1)[0]||null};};
+})();
+
 /* ---- 99_boot.js ---- */
 /* ===== 啟動（最後載入）===== */
 boot();
