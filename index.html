@@ -19475,6 +19475,281 @@ var Recall=window.Recall={};
  fixState=function(st){st=_fs(st);try{if(st&&st.x&&!st.x.rcl)st.x.rcl={ver:1,last:null,buf:[]};}catch(e){}return st;};
 })();
 
+/* ---- 72_nomnesia.js ---- */
+/* ===== 秦風 · 反失憶（Nomnesia）：NPC 持久記憶庫＋提示硬規則＋失憶對白事後檢查 ===== */
+var Nom=window.Nom={};
+(function(){
+ DEFSET.memd='high';
+ (function(){var i;for(i=0;i<SETSCHEMA.length;i++){if(SETSCHEMA[i][0]==='bondd'||(SETSCHEMA[i][0]==='h'&&/情感|劇情節奏/.test(SETSCHEMA[i][1]||''))){break;}}
+  if(i>=SETSCHEMA.length)i=SETSCHEMA.length;
+  SETSCHEMA.splice(i,0,['memd','select','記憶深度（NPC 持久記憶與反失憶檢查）',[['high','高（多記、嚴查失憶）'],['mid','中']]]);
+ })();
+
+ var CAP={high:48,mid:28}, RECENT={high:3,mid:2};
+ var AMNESIA=/我們沒(有)?說過|不曾說過|沒聽你說過|不記得你|記不得你|不認識你|素不相識|初次見面|第一次見|從未見過|沒見過你|忘了你說|早已忘記|不記得上回|不記得上次|不曾相識|無緣無故找上/;
+
+ function on(){return SET.memd!=='off';}
+ Nom.on=on;
+ function cap(){return CAP[SET.memd]||CAP.high;}
+ function recentN(){return RECENT[SET.memd]||RECENT.high;}
+ function N(){var x=X();if(!x.nmem)x.nmem={ver:1,npcs:{}};if(!x.nmem.npcs)x.nmem.npcs={};return x.nmem;}
+ Nom.N=N;
+ function bank(id){
+  if(!id||!NPC[id])return null;
+  var n=N();if(!n.npcs[id])n.npcs[id]={ver:1,list:[],met:0,last:-99};
+  var b=n.npcs[id];if(!b.list)b.list=[];return b;
+ }
+ Nom.bank=bank;
+
+ function isCrit(t,opts){
+  opts=opts||{};if(opts.crit||opts.k==='told'||opts.k==='secret'||opts.k==='recent')return 1;
+  var s=String(t||'');
+  if(/當面說|親口|坦白|告知|告訴我|向我透露/.test(s))return 1;
+  if(/女身|易裝|女扮|欺君|身世|血脈|公主|私生子|祕辛|秘辛|知情/.test(s))return 1;
+  if(/剛說|方才|剛才|上一幕/.test(s))return 1;
+  return 0;
+ }
+ function keyOf(opts,t){
+  if(opts&&opts.k)return opts.k;
+  var s=String(t||'');
+  if(/女身|易裝|女扮/.test(s))return 'secret';
+  if(/欺君/.test(s))return 'secret';
+  if(/身世|血脈|公主|私生子/.test(s))return 'secret';
+  if(/當面說|親口|坦白|告知/.test(s))return 'told';
+  if(/我對.*說|聽見/.test(s))return 'dlg';
+  return 'fact';
+ }
+
+ /* 寫入持久庫（永不丟關鍵） */
+ Nom.remember=function(id,text,opts){
+  if(!on()||!id||!NPC[id]||!text)return;
+  opts=opts||{};var b=bank(id);var t=String(text).replace(/\s+/g,' ').slice(0,140);if(t.length<2)return;
+  /* 去重：同日同文不重複 */
+  if(b.list.length&&b.list[b.list.length-1].t===t&&b.list[b.list.length-1].d===S.day)return;
+  var e={d:S.day,t:t,k:keyOf(opts,t),crit:isCrit(t,opts)?1:0};
+  if(opts.recent){e.k='recent';e.crit=1;}
+  b.list.push(e);b.met=1;b.last=S.day;Nom.trim(id);
+ };
+ Nom.trim=function(id){
+  var b=bank(id);if(!b)return;var max=cap();
+  while(b.list.length>max){
+   var idx=-1;
+   for(var i=0;i<b.list.length;i++){
+    var e=b.list[i];if(e.crit)continue;
+    if(e.k==='recent'||e.k==='secret'||e.k==='told')continue;
+    idx=i;break;
+   }
+   if(idx<0){
+    /* 全是關鍵：仍保留全部關鍵，只丟最舊的非 recent／secret／told */
+    for(i=0;i<b.list.length;i++){if(b.list[i].k!=='secret'&&b.list[i].k!=='told'&&b.list[i].k!=='recent'){idx=i;break;}}
+   }
+   if(idx<0)break; /* 全不可丟則停止 */
+   b.list.splice(idx,1);
+  }
+  /* recent 標記：只保留最近 6 條 recent 旗標，其餘降為 dlg 但仍 crit */
+  var rc=0;for(i=b.list.length-1;i>=0;i--){if(b.list[i].k==='recent'){rc++;if(rc>6){b.list[i].k='dlg';}}}
+ };
+
+ Nom.list=function(id,n){
+  var b=bank(id);if(!b||!b.list.length)return [];
+  n=n||10;return b.list.slice(-n);
+ };
+ Nom.met=function(id){var b=bank(id);if(b&&b.met)return 1;var r=S.rel&&S.rel[id];return !!(r&&r.met);};
+ Nom.promptFor=function(id){
+  if(!on()||!id||!NPC[id])return '';
+  var lines=[],b=bank(id),n=recentN();
+  /* 剛說過：若 last 涉及此人 */
+  try{
+   var rcl=window.Recall&&Recall.R?Recall.R():null;
+   if(rcl&&rcl.last&&rcl.last.ids&&rcl.last.ids.indexOf(id)>=0&&rcl.last.t){
+    lines.push('【與'+NPC[id].n+'剛說過（必須銜接，禁止假裝沒發生）】');
+    if(rcl.last.in)lines.push('玩家：「'+rcl.last.in+'」');
+    lines.push(rcl.last.t.slice(0,1200));
+   }else if(rcl&&rcl.buf&&rcl.buf.length){
+    var buf=rcl.buf.filter(function(x){return x.sp===id;}).slice(-n);
+    if(buf.length){lines.push('【與'+NPC[id].n+'近'+buf.length+'幕】'+buf.map(function(x){return (x.in?'你：「'+x.in+'」→':'')+x.t;}).join(' ／ '));}
+   }
+  }catch(e){}
+  var mem=Nom.list(id,SET.memd==='mid'?8:14);
+  if(mem.length){
+   lines.push('【'+NPC[id].n+'對'+S.p.name+'的持久記憶（不得否認；未列「未相識」則禁止說初次見面／不認識）】');
+   mem.forEach(function(m){lines.push('・'+m.t+(m.crit?'〔要〕':''));});
+  }
+  try{if(window.Bond&&Bond.on()){var c=Bond.card(id);if(c)lines.push(c);}}catch(e2){}
+  if(Nom.met(id))lines.push('（'+NPC[id].n+'已與玩家相識，禁止寫成素不相識或初次見面。）');
+  return lines.length?('\n'+lines.join('\n')):'';
+ };
+
+ Nom.aiBlock=function(){
+  if(!on()||!S)return '';
+  var ids=[],seen={};
+  try{var rcl=Recall.R();if(rcl&&rcl.last&&rcl.last.ids)rcl.last.ids.forEach(function(id){if(!seen[id]){seen[id]=1;ids.push(id);}});}catch(e){}
+  try{for(var id in N().npcs){if(!seen[id]&&N().npcs[id].met&&NPC[id]&&alive(id)){seen[id]=1;ids.push(id);}}}catch(e2){}
+  ids=ids.slice(0,5);
+  if(!ids.length)return '';
+  var out=['\n◆反失憶（硬規則）：下列人物已有與玩家的記憶；生成對白時必須體現，嚴禁「不記得／沒說過／初次見面／不認識你」（除非該人確實從未遇過玩家）。'];
+  ids.forEach(function(id){var p=Nom.promptFor(id);if(p)out.push(p);});
+  return out.join('\n');
+ };
+ Nom.aiRule=function(){
+  return '【反失憶・硬規則】①每位互動過的人物有持久記憶庫（對白、玩家親口告知、身世／欺君／女身知情等），換場景／重開仍在。②對該人說話時必須承接【剛說過的對話】與【持久記憶】，可引用原話。③已相識者禁止寫「初次見面／素不相識／不記得你／我們沒說過」。④若記憶與劇情衝突，以記憶庫為準。';
+ };
+
+ /* 失憶對白檢測：有記憶卻說不記得 → 改寫或標記 */
+ Nom.isAmnesia=function(text){return AMNESIA.test(String(text||''));};
+ Nom.shouldKnow=function(id){
+  if(!id||!NPC[id])return false;
+  if(Nom.met(id))return true;
+  var b=bank(id);return !!(b&&b.list&&b.list.length);
+ };
+ Nom.fixText=function(text,sp){
+  if(!on()||!text)return {t:text,fixed:0};
+  var id=sp&&NPC[sp]?sp:'';
+  if(!id||!Nom.shouldKnow(id)){
+   /* 無 speaker 時：若正文對玩家說失憶且任一已識者在場名？保守：只在有 sp 時修 */
+   return {t:text,fixed:0};
+  }
+  if(!Nom.isAmnesia(text))return {t:text,fixed:0};
+  var b=bank(id);var hint=(b.list&&b.list.length)?b.list[b.list.length-1].t:'先前與你交談過';
+  var t=String(text);
+  t=t.replace(/我們沒(有)?說過[^。！？]{0,20}[。！？]?/g,'先前之事我自然記得。');
+  t=t.replace(/不記得你[^。！？]{0,12}[。！？]?/g,'我怎會忘了你。');
+  t=t.replace(/記不得你[^。！？]{0,12}[。！？]?/g,'我記著你。');
+  t=t.replace(/不認識你[^。！？]{0,12}[。！？]?/g,'你我並非初識。');
+  t=t.replace(/素不相識[^。！？]{0,8}[。！？]?/g,'你我早已相識。');
+  t=t.replace(/初次見面[^。！？]{0,8}[。！？]?/g,'別來無恙。');
+  t=t.replace(/第一次見[^。！？]{0,8}[。！？]?/g,'又見面了。');
+  t=t.replace(/從未見過[^。！？]{0,10}[。！？]?/g,'先前見過。');
+  t=t.replace(/沒見過你[^。！？]{0,10}[。！？]?/g,'見過你的。');
+  t=t.replace(/不記得上回[^。！？]{0,16}[。！？]?/g,'上回之事我記得。');
+  t=t.replace(/不記得上次[^。！？]{0,16}[。！？]?/g,'上次之事我記得。');
+  t=t.replace(/不曾相識[^。！？]{0,8}[。！？]?/g,'你我相識已久。');
+  if(Nom.isAmnesia(t)){
+   /* 改寫不淨：整段替換為記憶銜接句 */
+   t=NPC[id].n+'神色一頓，似想起什麼，道：「……我記得。'+hint.slice(0,36)+'。今日又有何事？」';
+  }
+  return {t:t,fixed:1,hint:hint};
+ };
+ Nom.check=function(sc){
+  if(!on()||!sc||!sc.t)return sc;
+  var r=Nom.fixText(sc.t,sc.sp);
+  if(r.fixed){sc.t=r.t;sc._nomfix=1;try{toast('⚠ 已修正失憶對白（'+nm(sc.sp)+'應記得與你的往來）',2800);}catch(e){}}
+  return sc;
+ };
+
+ /* ---------- 掛鉤寫入 ---------- */
+ var _addMem=addMem;
+ addMem=function(id,t){_addMem(id,t);try{Nom.remember(id,t,{k:'dlg'});}catch(e){}};
+
+ if(window.Bond){
+  var _bn=Bond.note;
+  if(_bn)Bond.note=function(id,t){_bn(id,t);try{Nom.remember(id,t,{});}catch(e){}};
+  var _bl=Bond.learnSecret;
+  if(_bl)Bond.learnSecret=function(id,key,lv){_bl(id,key,lv);try{if((lv|0)>=1)Nom.remember(id,'得知'+S.p.name+'相關隱情（'+key+'）',{k:'secret',crit:1});}catch(e){}};
+ }
+ if(window.Gender&&Gender.tell){
+  var _gt=Gender.tell;
+  Gender.tell=function(id,b){_gt(id,b);try{Nom.remember(id,S.p.name+'親口／當面讓我得知其真實性別',{k:'told',crit:1});}catch(e){}};
+ }
+ if(window.Recall&&Recall.ingest){
+  var _ri=Recall.ingest;
+  Recall.ingest=function(sc,input){
+   _ri(sc,input);
+   try{
+    if(!sc||!sc.t)return;
+    var sp=sc.sp&&NPC[sc.sp]?sc.sp:'';
+    var ids=[];if(sp)ids.push(sp);
+    try{var rcl=Recall.R();if(rcl&&rcl.last&&rcl.last.ids)ids=rcl.last.ids.slice();}catch(e){}
+    ids.forEach(function(id){
+     if(!NPC[id])return;
+     if(input)Nom.remember(id,S.p.name+'當面說：「'+String(input).slice(0,50)+'」',{k:'told',crit:1,recent:1});
+     var raw=String(sc.t).replace(/\s+/g,' ').slice(0,100);
+     Nom.remember(id,'近幕與'+S.p.name+'：'+raw,{k:'recent',crit:1,recent:1});
+    });
+   }catch(e2){}
+  };
+ }
+
+ /* AI 提示 */
+ var _wr=AI.worldRules;
+ AI.worldRules=function(short){var t=_wr(short);try{if(on())t+=short?'【反失憶】已相識者不得說不記得／初次見面；須承接剛說過與持久記憶。':Nom.aiRule();}catch(e){}return t;};
+ var _sm=AI.summary;
+ AI.summary=function(){var s=_sm.apply(this,arguments);try{if(on())s+=Nom.aiBlock();}catch(e){}return s;};
+ var _um=AI.userMsg;
+ AI.userMsg=function(a){
+  var msg=_um(a);
+  try{
+   if(on()){
+    var ids=[];try{var rcl=Recall.R();if(rcl&&rcl.last&&rcl.last.ids)ids=rcl.last.ids;}catch(e){}
+    if(!ids.length&&a&&a.text){try{ids=(window.Facts&&Facts.mentions?Facts.mentions(a.text):[]).map(function(x){return x.id;}).filter(function(id){return NPC[id];}).slice(0,3);}catch(e2){}}
+    var extra='';ids.slice(0,3).forEach(function(id){extra+=Nom.promptFor(id);});
+    if(extra)msg+=extra+'\n（硬規則：以上記憶不得否認。）';
+   }
+  }catch(e3){}
+  return msg;
+ };
+
+ /* AI 回覆事後檢查 */
+ var _run=AI.run;
+ AI.run=function(a){
+  return _run(a).then(function(sc){
+   try{sc=Nom.check(sc);}catch(e){}
+   return sc;
+  },function(err){
+   /* 若完全失憶且嚴重，可離線——交由原錯誤處理 */
+   throw err;
+  });
+ };
+
+ /* 離線 present 也檢查 */
+ var _pres=present;
+ present=function(sc,opt){
+  try{if(sc&&sc.t&&!sc.async)sc=Nom.check(sc);}catch(e){}
+  return _pres(sc,opt);
+ };
+
+ /* 面板：他記得的事（持久庫） */
+ Nom.panelHTML=function(id){
+  if(!on()||!id||!NPC[id])return '';
+  var L=Nom.list(id,SET.memd==='mid'?6:10);if(!L.length)return '';
+  var h='<div style="margin-top:6px;padding-top:6px;border-top:1px dashed rgba(217,169,58,.35)">';
+  h+='<div style="color:#d9a93a;font-size:12px;margin-bottom:2px">他／她記得的事（持久）</div>';
+  for(var i=L.length-1;i>=0;i--){h+='<div class="mem">'+esc(dateStr(L[i].d))+'　'+esc(L[i].t)+(L[i].crit?' <span class="hint">要</span>':'')+'</div>';}
+  h+='</div>';return h;
+ };
+ var _rrh=relRowH;
+ relRowH=function(id){
+  var h=_rrh(id);
+  try{if(on()&&UIs.openRel&&UIs.openRel[id]){var ph=Nom.panelHTML(id);if(ph){var idx=h.lastIndexOf('</div>');if(idx>=0&&h.indexOf('class="rd"')>=0)h=h.slice(0,idx)+ph+h.slice(idx);else if(idx>=0)h=h.slice(0,idx)+ph+h.slice(idx);else h+=ph;}}}catch(e){}
+  return h;
+ };
+
+ /* 舊存檔：從 R.mem／Bond 遷移 */
+ Nom.migrate=function(){
+  if(!S||!S.rel)return;
+  for(var id in S.rel){
+   if(!NPC[id])continue;var r=S.rel[id];if(!r)continue;
+   if(r.met){var b=bank(id);b.met=1;}
+   if(r.mem&&r.mem.length){for(var i=0;i<r.mem.length;i++)Nom.remember(id,r.mem[i].t,{k:'dlg'});}
+   try{
+    if(window.Bond){
+     var bb=Bond.get(id);
+     if(bb&&bb.mem){for(i=0;i<bb.mem.length;i++)Nom.remember(id,bb.mem[i].t,{});}
+     if(bb&&bb.secrets){for(var k in bb.secrets){if(bb.secrets[k]>=1)Nom.remember(id,'知情／懷疑：'+k,{k:'secret',crit:1});}}
+    }
+   }catch(e){}
+  }
+ };
+ var _lo=loadObj;
+ loadObj=function(o){var r=_lo(o);try{N();Nom.migrate();}catch(e){}return r;};
+ var _sg=startGame;
+ startGame=function(cfg){var r=_sg(cfg);try{N();}catch(e){}return r;};
+ var _fs=fixState;
+ fixState=function(st){st=_fs(st);try{if(st&&st.x&&!st.x.nmem)st.x.nmem={ver:1,npcs:{}};}catch(e){}return st;};
+
+ Nom.report=function(id){if(id)return {n:Nom.list(id,99).length,met:Nom.met(id),sample:Nom.list(id,3)};return {npcs:Object.keys(N().npcs).length,cap:cap()};};
+})();
+
 /* ---- 99_boot.js ---- */
 /* ===== 啟動（最後載入）===== */
 boot();
