@@ -19750,6 +19750,538 @@ var Nom=window.Nom={};
  Nom.report=function(id){if(id)return {n:Nom.list(id,99).length,met:Nom.met(id),sample:Nom.list(id,3)};return {npcs:Object.keys(N().npcs).length,cap:cap()};};
 })();
 
+/* ---- 73_act.js ---- */
+/* ===== 秦風 · 對話行動指令（Act）：即場行動解析＋在場 NPC 依 Bond／知情／性格反應 ===== */
+var Act=window.Act={};
+(function(){
+ DEFSET.actd=true;
+ (function(){var i;for(i=0;i<SETSCHEMA.length;i++){if(SETSCHEMA[i][0]==='memd'||SETSCHEMA[i][0]==='bondd'){break;}}
+  if(i>=SETSCHEMA.length)i=SETSCHEMA.length;
+  SETSCHEMA.splice(i,0,['actd','check','對話行動指令（輸入「/指令」或「我拿起劍自刺」等即場行動）']);})();
+
+ function on(){return SET.actd!==false;}
+ Act.on=on;
+
+ var VERBS=[
+  {k:'selfharm',re:/自刺|自刎|自盡|自戕|割腕|刺己|刺自己|以死明志|以證清白|明志|自殘|揮劍向己|劍尖向己|刺向自己|刺向心口/,lab:'自傷明志'},
+  {k:'threat',re:/威脅|拿刀指|刀指|劍指|挾持|脅迫|恐嚇|要挾/,lab:'威脅'},
+  {k:'show',re:/出示|拿出|亮出|展示|遞給|交給|呈上|奉上|掏出|取出/,lab:'出示'},
+  {k:'flee',re:/逃跑|逃走|遁走|轉身就跑|奪門|開溜|抽身離去|拔腿就跑/,lab:'逃跑'},
+  {k:'grab',re:/拿起|拔劍|拔刀|奪過|抓起|抄起|抄起/,lab:'持械'},
+  {k:'kneel',re:/下跪|跪地|跪倒|叩首|磕頭|伏地|長跪/,lab:'下跪'},
+  {k:'strike',re:/揮拳|動手|砍向|刺向(?!自己)|打向|襲擊|抽刀/,lab:'動手'},
+  {k:'drink',re:/服毒|喝下|一口喝|仰頭飲|吞下毒藥/,lab:'服毒'},
+  {k:'give',re:/贈予|送來|獻上/,lab:'贈予'}
+ ];
+
+ Act.isCmd=function(t){
+  t=String(t||'');
+  if(/^\s*\/(指令|行動|act|help|幫助)/i.test(t))return 1;
+  if(/^\s*\//.test(t))return 1;
+  for(var i=0;i<VERBS.length;i++){if(VERBS[i].re.test(t))return 1;}
+  if(/我(就)?(拿起|拔出|抄起|抓起).{0,12}(劍|刀|匕首)/.test(t))return 1;
+  return 0;
+ };
+ Act.help=function(){
+  return '【對話行動指令】\n可在與人物對話時輸入即場行動，例如：\n・我拿起呂不韋身邊的劍，自刺以證清白\n・／出示 信物\n・／逃跑\n・／下跪\n・威脅對方閉嘴\n系統會解析行動，讓在場人物依情感、知情與性格即時反應；結果寫入記憶與日誌。\n（離線為簡化裁決；連線 AI 時會把行動併入提示。）';
+ };
+
+ Act.parse=function(text){
+  if(!on()||!text)return null;
+  var raw=String(text).replace(/^\s+|\s+$/g,'').slice(0,200);
+  if(/^\s*\/(指令|help|幫助)\s*$/i.test(raw))return {k:'help',lab:'說明',raw:raw,tg:'',item:''};
+  var body=raw.replace(/^\s*\/(行動|act)\s*/i,'').replace(/^\s*\//,'');
+  if(!Act.isCmd(raw)&&!Act.isCmd(body))return null;
+  var verb=null;
+  for(var i=0;i<VERBS.length;i++){if(VERBS[i].re.test(body)||VERBS[i].re.test(raw)){verb=VERBS[i];break;}}
+  if(!verb&&/^\s*\//.test(raw)){
+   if(/逃/.test(body))verb=VERBS.filter(function(v){return v.k==='flee';})[0];
+   else if(/跪/.test(body))verb=VERBS.filter(function(v){return v.k==='kneel';})[0];
+   else if(/出示|拿出|亮/.test(body))verb=VERBS.filter(function(v){return v.k==='show';})[0];
+   else if(/自刺|自刎|明志/.test(body))verb=VERBS.filter(function(v){return v.k==='selfharm';})[0];
+  }
+  if(!verb)return null;
+  var ids=[];try{ids=mentioned(body);}catch(e){ids=[];}
+  /* 物品粗提 */
+  var item='';var im=body.match(/(劍|刀|匕首|信物|玉佩|密函|書信|毒藥|酒|印|令牌|虎符)[^，。！？]{0,6}/);
+  if(im)item=im[0].slice(0,12);
+  if(verb.k==='grab'&&!item)item='劍';
+  /* 若同時有 grab+selfharm，主動詞為 selfharm */
+  if(verb.k==='grab'){
+   for(i=0;i<VERBS.length;i++){if(VERBS[i].k==='selfharm'&&VERBS[i].re.test(body)){verb=VERBS[i];break;}}
+  }
+  var tg=ids.length?ids[0]:'';
+  try{if(!tg&&S.scene&&S.scene.sp&&NPC[S.scene.sp])tg=S.scene.sp;}catch(e2){}
+  return {k:verb.k,lab:verb.lab,raw:raw,body:body,tg:tg,ids:ids,item:item};
+ };
+
+ Act.present=function(prefer){
+  var out=[],seen={};
+  function add(id){if(id&&NPC[id]&&alive(id)&&!seen[id]){seen[id]=1;out.push(id);}}
+  if(prefer)add(prefer);
+  try{if(S.scene&&S.scene.sp)add(S.scene.sp);}catch(e){}
+  try{
+   var hn=hereNpcs();
+   for(var i=0;i<hn.length;i++){
+    if(typeof spotOf==='function'&&spotOf(hn[i])!==S.p.spot)continue;
+    add(hn[i]);
+    if(out.length>=5)break;
+   }
+  }catch(e2){}
+  return out;
+ };
+
+ /* 依 Bond／立場／性格選反應 */
+ Act.reactOf=function(id,act){
+  var n=NPC[id],r=R(id),lean='neutral',sc=0,e={};
+  try{if(window.Bond&&Bond.on()){Bond.refreshLean(id);lean=Bond.leanOf(id);sc=Bond.score(id);e=(Bond.get(id)||{}).emo||{};}}catch(err){}
+  var k=act.k,out={id:id,act:'watch',line:'',emo:{},mem:''};
+  if(k==='selfharm'||k==='drink'){
+   if(lean==='protect'||lean==='favor'||(e.lo|0)>=30||(e.af|0)>=40||r.af>=50||r.lo>=30){
+    out.act='stop';out.line=n.n+'臉色大變，搶上前按住你的手：「不可！」';out.emo={af:4,lo:3,pi:8,ha:-2};out.mem='目睹'+S.p.name+'欲自傷，上前阻止';
+   }else if(lean==='hurt'||(e.ha|0)>=40||r.ha>=40){
+    out.act='exploit';out.line=n.n+'冷眼旁觀，嘴角微動：「……有意思。」';out.emo={ha:2,re:-2};out.mem='見'+S.p.name+'自傷而不救，心生利用之念';
+   }else if(lean==='use'||(n.amb|0)>=70){
+    out.act='bargain';out.line=n.n+'沉聲：「先放下。你想要什麼條件？」';out.emo={re:2,su:2};out.mem='以'+S.p.name+'自傷要挾談判';
+   }else if(n.tier>=4||id===S.emp){
+    out.act='order';out.line=n.n+'喝令左右：「按住！召醫官！」';out.emo={su:3,re:2,pi:2};out.mem='下令救治欲自傷的'+S.p.name;
+   }else{
+    out.act='shock';out.line=n.n+'大驚失色：「你——！」';out.emo={su:4,pi:3};out.mem='震驚於'+S.p.name+'當場自傷';
+   }
+  }else if(k==='threat'){
+   if(lean==='hurt'||r.ha>=30||(n.cru|0)>=60){out.act='counter';out.line=n.n+'眼神一凜：「你敢？」';out.emo={ha:6,fe:-2};out.mem=S.p.name+'以武力相脅，心生敵意';}
+   else if(lean==='protect'||r.tr>=50){out.act='calm';out.line=n.n+'按住你的腕：「把話說清楚，不必如此。」';out.emo={tr:2,af:1};out.mem='勸'+S.p.name+'放下脅迫';}
+   else{out.act='fear';out.line=n.n+'後退半步，聲音發緊：「……你想怎樣？」';out.emo={fe:8,su:4};out.mem='被'+S.p.name+'威脅';}
+  }else if(k==='show'){
+   out.act='inspect';out.line=n.n+'目光落在你出示之物上，神色微變。';out.emo={su:2,re:1};out.mem='見'+S.p.name+'出示'+(act.item||'一物');
+  }else if(k==='flee'){
+   if(lean==='hurt'||lean==='use'){out.act='chase';out.line=n.n+'喝道：「站住！」';out.emo={ha:2,su:2};out.mem='喝止欲逃的'+S.p.name;}
+   else{out.act='allow';out.line=n.n+'沒有阻攔，只是深深看了你一眼。';out.emo={su:1};out.mem='任'+S.p.name+'離去';}
+  }else if(k==='kneel'){
+   if(n.tier>=3){out.act='raise';out.line=n.n+'淡淡道：「起來說話。」';out.emo={re:3,af:1};out.mem=S.p.name+'跪地相求';}
+   else{out.act='awkward';out.line=n.n+'連忙扶你：「這可使不得……」';out.emo={af:2,pi:2};out.mem=S.p.name+'向自己下跪，受寵若驚';}
+  }else if(k==='strike'){
+   if(lean==='protect'&&act.tg&&act.tg!==id){out.act='shield';out.line=n.n+'擋在前面：「且慢！」';out.emo={af:2};out.mem='擋下'+S.p.name+'的動手';}
+   else{out.act='clash';out.line=n.n+'側身避過，臉色鐵青。';out.emo={ha:5,fe:2};out.mem='與'+S.p.name+'當場動手';}
+  }else if(k==='grab'){
+   out.act='alert';out.line=n.n+'目光一凝，盯著你手中的'+(act.item||'兵器')+'。';out.emo={su:3,fe:2};out.mem='見'+S.p.name+'持'+(act.item||'械');
+  }else{
+   out.act='watch';out.line=n.n+'看着你的舉動，一時無語。';out.emo={su:1};out.mem='目睹'+S.p.name+'之舉：'+act.lab;
+  }
+  return out;
+ };
+
+ Act.applyReact=function(rx,act){
+  if(!rx||!rx.id)return;
+  var id=rx.id;
+  try{
+   if(rx.emo&&window.Bond&&Bond.on())Bond.feelDelta(id,rx.emo,rx.mem||act.lab);
+   if(rx.mem){try{addMem(id,rx.mem);}catch(e){}try{if(window.Nom)Nom.remember(id,rx.mem,{k:'recent',crit:1,recent:1});}catch(e2){}}
+   if(rx.emo){
+    var fx={};for(var k in rx.emo){if(k==='af'||k==='lo'||k==='tr'||k==='ha'||k==='su'||k==='fe'||k==='re'||k==='ly')fx[k]=Math.round((rx.emo[k]||0)/2);}
+    if(Object.keys(fx).length){var rel={};rel[id]=fx;try{applyFx({rel:rel});}catch(e3){}}
+   }
+  }catch(e4){}
+ };
+
+ Act.record=function(act,reacts,txt){
+  try{
+   var line='【行動・'+act.lab+'】'+act.body.slice(0,60);
+   try{if(window.FullLog&&FullLog.pick)FullLog.pick(act.body);addLog(line);}catch(e){}
+   (reacts||[]).forEach(function(rx){Act.applyReact(rx,act);});
+   if(act.tg){try{if(window.Nom)Nom.remember(act.tg,S.p.name+'當場'+act.lab+(act.item?'（'+act.item+'）':''),{k:'told',crit:1});}catch(e3){}}
+  }catch(e4){}
+ };
+
+ Act.aiBlock=function(act){
+  if(!act)return '';
+  var ids=Act.present(act.tg);
+  var lines=['\n◆即場行動（硬規則）：玩家本回合正在執行「'+act.lab+'」——'+act.body.slice(0,80)+'。',
+   '你必須讓在場人物對此行動立刻作出符合性格與情感的反應（阻止／震驚／心疼／利用／下令救治／條件交換等），不可當沒看見。',
+   '不可讓已相識者失憶；結果應反映行動後果（受傷、被按住、被喝止等）。'];
+  ids.forEach(function(id){
+   var rx=Act.reactOf(id,act);
+   var card='';try{if(window.Bond)card=Bond.card(id)||'';}catch(e){}
+   lines.push('・'+NPC[id].n+'傾向「'+rx.act+'」：'+(card?card+' ':'')+'參考句：'+rx.line);
+  });
+  return lines.join('\n');
+ };
+
+ Act.resolveOffline=function(act){
+  if(act.k==='help')return {t:Act.help(),sp:'',bg:S.p.spot,kind:'event',ch:[ch('明白了','hub')]};
+  var ids=Act.present(act.tg);
+  if(!ids.length&&act.tg)ids=[act.tg];
+  var reacts=ids.map(function(id){return Act.reactOf(id,act);});
+  var fx={days:0,st:{}};
+  var narr='你當着眾人，'+act.body.slice(0,70)+'。\n';
+  if(act.k==='selfharm'||act.k==='drink'){
+   var stopped=reacts.some(function(x){return x.act==='stop'||x.act==='order';});
+   if(stopped){fx.st.hp=-(4+rnd(6));narr+='未及深刺，已被人按住。你只受了輕傷。\n';}
+   else{fx.st.hp=-(18+rnd(14));narr+='鋒刃見血，你搖搖欲墜。\n';}
+  }else if(act.k==='flee'){
+   var chased=reacts.some(function(x){return x.act==='chase';});
+   if(chased&&roll(55)){narr+='你未能走遠，被人喝住。\n';}
+   else{narr+='你抽身退出這場風暴。\n';fx.days=1;}
+  }else if(act.k==='strike'){fx.st.hp=-(2+rnd(4));narr+='場面一陣混亂。\n';}
+  reacts.forEach(function(rx){narr+=rx.line+'\n';});
+  var o=applyFx(fx);
+  if(S.p.st.hp<=0){try{S.p.st.hp=1;}catch(e){}}
+  var txt=narr+fxLine(o);
+  Act.record(act,reacts,txt);
+  var sp=act.tg||(reacts[0]&&reacts[0].id)||'';
+  return {t:'【'+act.lab+'】\n'+txt,sp:sp,bg:S.p.spot,kind:'event',ch:[ch('……','hub'),ch('繼續說','hub')],_act:1};
+ };
+
+ /* 掛鉤：自由輸入優先攔截行動 */
+ var _ft=NODES.freeText;
+ NODES.freeText=function(a){
+  var t=String((a&&a.text)||'');
+  if(on()&&Act.isCmd(t)){
+   var act=Act.parse(t);
+   if(act){
+    Act._pend=act;
+    if(act.k==='help')return Act.resolveOffline(act);
+    if(SET.ai&&AI.ready()){
+     return {t:'……',sp:'',bg:S.p.spot,kind:'loading',ch:[],async:{type:'free',text:t,fb:{go:'actOffline',a:{text:t}},_act:1}};
+    }
+    return Act.resolveOffline(act);
+   }
+  }
+  return _ft(a);
+ };
+ NODES.actOffline=function(a){
+  var act=Act._pend||Act.parse((a&&a.text)||'');
+  Act._pend=null;
+  if(act)return Act.resolveOffline(act);
+  return NODES.freeOffline(a);
+ };
+ var _fo=NODES.freeOffline;
+ NODES.freeOffline=function(a){
+  var t=String((a&&a.text)||'');
+  if(on()&&Act.isCmd(t)){var act=Act.parse(t);if(act){Act._pend=null;return Act.resolveOffline(act);}}
+  return _fo(a);
+ };
+
+ /* AI 提示＋事後記錄 */
+ var _um=AI.userMsg;
+ AI.userMsg=function(a){
+  var msg=_um(a);
+  try{
+   if(on()&&a&&a.text){
+    var act=Act._pend||Act.parse(a.text);
+    if(act&&act.k!=='help')msg+=Act.aiBlock(act);
+   }
+  }catch(e){}
+  return msg;
+ };
+ var _wr=AI.worldRules;
+ AI.worldRules=function(short){
+  var t=_wr(short);
+  try{if(on())t+=short?'【行動】玩家若自傷／出示／逃跑等，在場者必須立刻反應。':'【對話行動】玩家可在對白中插入即場行動（自刺明志、出示信物、威脅、逃跑、下跪等）。你必須讓在場 NPC 依情感與性格即時反應，並把後果寫進 scene；不可忽略行動。';}catch(e){}
+  return t;
+ };
+ var _run=AI.run;
+ AI.run=function(a){
+  return _run(a).then(function(sc){
+   try{
+    if(on()&&Act._pend&&sc&&sc.t){
+     var act=Act._pend;var reacts=Act.present(act.tg).map(function(id){return Act.reactOf(id,act);});
+     /* 若 AI 完全沒提行動關鍵，補一行離線反應摘要 */
+     var key=act.lab.slice(0,2);
+     if(sc.t.indexOf(act.lab)<0&&!/(自刺|劍|跪|逃|出示|威脅)/.test(sc.t)){
+      sc.t+='\n'+reacts.map(function(rx){return rx.line;}).join('\n');
+     }
+     Act.record(act,reacts,sc.t);
+     Act._pend=null;
+    }
+   }catch(e){Act._pend=null;}
+   return sc;
+  },function(err){Act._pend=null;throw err;});
+ };
+
+ Act.report=function(){return {on:on(),pend:!!Act._pend};};
+})();
+
+/* ---- 74_secret.js ---- */
+/* ===== 秦風 · 秘密守秘（Seal）：親口告知預設保密、無動機不擴散、攔截無故洩密 ===== */
+var Seal=window.Seal={};
+(function(){
+ DEFSET.seald=true;
+ (function(){var i;for(i=0;i<SETSCHEMA.length;i++){if(SETSCHEMA[i][0]==='actd'||SETSCHEMA[i][0]==='memd'||SETSCHEMA[i][0]==='bondd'){break;}}
+  if(i>=SETSCHEMA.length)i=SETSCHEMA.length;
+  SETSCHEMA.splice(i,0,['seald','check','秘密守秘（親口告知預設不外傳；關閉則恢復舊擴散）']);})();
+
+ function on(){return SET.seald!==false;}
+ Seal.on=on;
+ var ALLOW=/允許傳|准許傳|可以告訴|可以跟.+說|轉告|傳話給|跟.+說一聲|把這事告訴|把此事告知|替我告訴|替我轉告|宣佈|昭告|當眾說|當着.{0,6}說/;
+ var FORCE=/審問|逼供|嚴刑|拷問|招供|供出|告發|密報|參了|彈劾|揭發|出首/;
+ var PUBLIC=/當眾|大庭廣眾|朝堂之上|眾人面前|公開場合|滿座皆知/;
+ var TOLD=/給.{0,8}看|拿給|交給|遞給|展示|示之|讓.{1,4}看|告知|告訴|坦白|說出|透露|招供|供出|交代|出示|拿出|亮出|寫信|傳信|通知|託人|送信|稟報|稟告|密報|傳話|信中|親口/;
+
+ function fa(){return Facts.F();}
+ Seal.markTold=function(K,f,why){
+  if(!f||!K||K==='p')return;
+  f.seal=f.seal||{};
+  f.seal[K]={d:S.day,why:why||'told'};
+  f.exp=f.exp||{};f.exp[K]=1;
+  /* 長期守秘：遠超一般 hush，除非動機或玩家允許 */
+  try{var h=fa().hush;h[K]=Math.max(h[K]|0,S.day+3600);}catch(e){}
+ };
+ Seal.isSealed=function(K,f){
+  if(!f||!K)return false;
+  if(f.seal&&f.seal[K])return true;
+  /* 相容：exp 來自玩家親口且未公開 */
+  if(f.exp&&f.exp[K]&&f.vis<2&&!f.pub)return true;
+  return false;
+ };
+ Seal.hasMotive=function(K,f,ctx){
+  ctx=ctx||{};
+  if(!K||!f)return false;
+  if(f.vis>=2||f.pub)return true; /* 已公開傳聞級可傳 */
+  if(ctx.force)return true;
+  if(ctx.allow)return true;
+  if(ctx.overhear)return true;
+  /* 敵意告發 */
+  try{
+   var st=Facts.stance(K,f);
+   var r=R(K),ha=r.ha||0,lean='';
+   try{if(window.Bond&&Bond.on())lean=Bond.leanOf(K);}catch(e){}
+   if((st==='foe'||st==='exploit')&&(ha>=40||lean==='hurt'))return true;
+   if(st==='law'&&(ha>=25||(r.su|0)>=50))return true;
+  }catch(e2){}
+  /* 標記過允許／逼供 */
+  if(f.seal&&f.seal[K]&&f.seal[K].allow)return true;
+  if(f.allow&&f.allow[K])return true;
+  return false;
+ };
+ Seal.allowPass=function(K,f){
+  if(!f||!K)return;
+  f.allow=f.allow||{};f.allow[K]=S.day;
+  if(f.seal&&f.seal[K])f.seal[K].allow=1;
+  try{var h=fa().hush;if(h[K]>S.day)delete h[K];}catch(e){}
+ };
+ Seal.parseAllow=function(text){
+  text=String(text||'');
+  if(!ALLOW.test(text)&&!/\/允許/.test(text))return [];
+  var ids=[];try{ids=mentioned(text);}catch(e){}
+  return ids;
+ };
+
+ /* 玩家親口告知 → 標記守秘；公開場合第三人可「聽見」 */
+ var _learn=Facts.learn;
+ Facts.learn=function(K,f,via,b,quiet){
+  var r=_learn.call(this,K,f,via,b,quiet);
+  try{
+   if(on()&&r&&f&&f.sub==='p'&&K&&K!=='p'){
+    if(via==='p'||Pace._force){
+     Seal.markTold(K,f,'told');
+     /* 公開場合：同 spot 其他在場者可能聽見（傳聞級，不守秘） */
+     var pub=0;try{pub=PUBLIC.test(String(Seal._input||Pace._input||''));}catch(e){}
+     if(pub||(Seal._wit&&Seal._wit.length)){
+      var wits=Seal._wit||[];
+      if(pub){try{var hn=hereNpcs();for(var i=0;i<hn.length;i++){if(typeof spotOf==='function'&&spotOf(hn[i])===S.p.spot&&hn[i]!==K)wits.push(hn[i]);}}catch(e2){}}
+      wits.forEach(function(w){
+       if(!w||w===K||!NPC[w]||!alive(w)||f.kn[w]!==undefined)return;
+       if(Seal.isSealed(w,f))return;
+       _learn.call(Facts,w,f,'',Math.min(48,b|40),true);
+       if(Facts.stat)Facts.stat.overhear=(Facts.stat.overhear||0)+1;
+      });
+     }
+    }
+   }
+  }catch(e3){}
+  return r;
+ };
+
+ /* 每日擴散：守秘者視為 hush；事後剔除無動機傳遞；保留原 checkHooks／公開擴散 */
+ function factById(id){var L=fa().list;for(var i=0;i<L.length;i++){if(L[i].i===id)return L[i];}return null;}
+ var _tick=Facts.tickDay;
+ Facts.tickDay=function(){
+  if(!on())return _tick.call(this);
+  if(!S||!S.x||!S.x.facts)return _tick.call(this);
+  var F=fa(),boost=[];
+  Seal._auto=1;
+  /* 守秘且無動機 → 臨時拉長 hush，使原 tick 不會讓他們傳播 */
+  for(var i=0;i<F.list.length;i++){
+   var f=F.list[i];if(f.sub!=='p'||f.vis>=2||f.pub)continue;
+   if(!f.seal)continue;
+   for(var K in f.seal){
+    if(Seal.hasMotive(K,f))continue;
+    boost.push({K:K,prev:F.hush[K]});
+    F.hush[K]=Math.max(F.hush[K]|0,S.day+9000);
+   }
+  }
+  /* 預先剔除無動機 pend */
+  for(i=F.pend.length-1;i>=0;i--){
+   var p=F.pend[i],f0=factById(p.f);
+   if(f0&&f0.sub==='p'&&f0.vis<2&&p.from&&Seal.isSealed(p.from,f0)&&!Seal.hasMotive(p.from,f0)){
+    F.pend.splice(i,1);if(Facts.stat)Facts.stat.sealBlock=(Facts.stat.sealBlock||0)+1;
+   }
+  }
+  try{_tick.call(this);}finally{Seal._auto=0;}
+  /* 事後再清：原 tick 可能又排了從守秘者傳出的 pend */
+  for(i=F.pend.length-1;i>=0;i--){
+   p=F.pend[i];f0=factById(p.f);
+   if(f0&&f0.sub==='p'&&f0.vis<2&&p.from&&Seal.isSealed(p.from,f0)&&!Seal.hasMotive(p.from,f0)){
+    F.pend.splice(i,1);if(Facts.stat)Facts.stat.sealBlock=(Facts.stat.sealBlock||0)+1;
+   }
+  }
+  /* 玩家 secret 級：撤銷當日無動機新建的非公開 pend（from 非空） */
+  for(i=F.pend.length-1;i>=0;i--){
+   p=F.pend[i];f0=factById(p.f);
+   if(!f0||f0.sub!=='p'||f0.vis>=1||f0.pub)continue;
+   if(p.from&&!Seal.hasMotive(p.from,f0)){F.pend.splice(i,1);if(Facts.stat)Facts.stat.sealBlock=(Facts.stat.sealBlock||0)+1;}
+  }
+ };
+
+ /* 禁止無動機自動公開玩家秘辛 */
+ var _gp=Facts.goPublic;
+ Facts.goPublic=function(f,silent){
+  /* 僅擋每日自動公開；玩家／面板／劇情明示仍可 */
+  if(on()&&Seal._auto&&f&&f.sub==='p'&&!Pace._manual&&!f.pubBy){
+   if(Facts.stat)Facts.stat.sealPubBlock=(Facts.stat.sealPubBlock||0)+1;
+   return;
+  }
+  return _gp.call(this,f,silent);
+ };
+
+ /* Pace.spread：玩家秘辛幾乎不傳 */
+ if(window.Pace&&Pace.spread){
+  var _sp=Pace.spread;
+  Pace.spread=function(f){
+   var r=_sp(f);if(!r||!on())return r;
+   if(f.sub==='p'&&f.vis<2){r.mulp=0;r.cap=0;r.min=99;r.bmax=0;}
+   else if(f.sub==='p'){r.mulp*=0.15;r.cap=Math.min(r.cap,2);r.bmax=Math.min(r.bmax,40);}
+   return r;
+  };
+ }
+
+ /* ingest 守衛：無告知動機不得把守秘秘密擴給新人 */
+ var _ing=Facts.ingest;
+ Facts.ingest=function(list,ctx){
+  ctx=ctx||{};
+  Seal._input=(ctx.scene||'')+(Pace._input||'');
+  try{
+   if(on()&&Array.isArray(list)&&(ctx.src==='ai'||ctx.src==='polish')){
+    var forceTxt=Seal._input+(Pace._input||'')+String(ctx.scene||'');
+    var force=ALLOW.test(forceTxt)||FORCE.test(forceTxt)||PUBLIC.test(forceTxt)||TOLD.test(forceTxt)||!!Pace._force||ctx.force;
+    var spk=Facts.resolve(ctx.speaker||'');
+    list=list.map(function(e){
+     if(!e||typeof e!=='object')return e;
+     var o=null;try{o=Facts.norm(e);}catch(x){}
+     if(!o||o.sub!=='p')return e;
+     var c={};for(var k in e)c[k]=e[k];
+     var kb=[].concat(c.knownBy||c.kn||[]);
+     var dup=null;
+     try{var L=Facts.F().list;for(var i=0;i<L.length;i++){var g=L[i];if(g.st==='refuted')continue;if(g.type===o.type&&g.sub===o.sub&&g.obj===o.obj&&g.kin===o.kin){dup=g;break;}}}catch(x2){}
+     if(!force&&dup){
+      /* 僅擋「既有守秘秘辛」被 AI 無故擴知情；新發現交由 Facts／Pace 既有守衛 */
+      var keep=[];
+      for(var j=0;j<kb.length;j++){
+       var id=Facts.resolve(kb[j]);if(!id||id==='p'){keep.push(kb[j]);continue;}
+       if(dup.kn&&dup.kn[id]!==undefined){keep.push(kb[j]);continue;}
+       if(spk&&id===spk){keep.push(kb[j]);continue;}
+       if(dup.seal&&Object.keys(dup.seal).length&&!Seal.hasMotive(spk||'',dup,{allow:ALLOW.test(forceTxt),force:FORCE.test(forceTxt)})){
+        if(Facts.stat)Facts.stat.sealGuard=(Facts.stat.sealGuard||0)+1;continue;
+       }
+       /* 無封印的既有事實：仍允許少量新增（交 Pace.guard） */
+       keep.push(kb[j]);
+      }
+      c.knownBy=keep;delete c.kn;
+      if((c.vis==='public'||o.vis>=2)&&!Pace._manual&&!dup.pubBy&&dup.sub==='p'&&dup.seal&&Object.keys(dup.seal).length)c.vis=dup.vis>=1?'rumor':'secret';
+     }else if(force){
+      Seal.parseAllow(forceTxt).forEach(function(id){
+       try{var L2=Facts.F().list;for(var ii=0;ii<L2.length;ii++){if(L2[ii].sub==='p')Seal.allowPass(id,L2[ii]);}}catch(x3){}
+      });
+     }
+     return c;
+    });
+   }
+  }catch(e){}
+  try{return _ing.call(this,list,ctx);}finally{Seal._input='';Seal._wit=null;}
+ };
+
+ /* 自由輸入：允許傳話／公開說 */
+ var _ft=NODES.freeText;
+ NODES.freeText=function(a){
+  var t=String((a&&a.text)||'');
+  if(on()){
+   Seal._input=t;
+   if(PUBLIC.test(t)){try{Seal._wit=hereNpcs().filter(function(id){return spotOf(id)===S.p.spot;});}catch(e){Seal._wit=[];}}
+   var al=Seal.parseAllow(t);
+   if(al.length){try{var L=Facts.F().list;for(var i=0;i<L.length;i++){if(L[i].sub==='p')al.forEach(function(id){Seal.allowPass(id,L[i]);});}addLog('你允許將秘密傳予'+al.map(nm).join('、')+'。');}catch(e2){}}
+  }
+  return _ft(a);
+ };
+
+ /* AI 規則＋洩密加強：不知情或應守秘者不可對外宣揚 */
+ var _wr=AI.worldRules;
+ AI.worldRules=function(short){
+  var t=_wr(short);
+  try{if(on())t+=short?'【守秘】親口告知的秘密對方預設不外傳，禁止無故擴散。':'【秘密守秘・硬規則】①玩家親口告訴某角色的秘密，該角色預設守口，不得轉告他人、不得寫進公開議論。②只有審問逼供、敵意告發、玩家明確允許傳話、或公開場合被第三人聽見，才可擴散。③禁止無動機的社交圖傳染；effects.knownBy 不得把守秘秘密擴給無關者。④不知情者仍不可提及秘辛。';}catch(e){}
+  return t;
+ };
+
+ /* 事後：若 AI 讓守秘者「告訴／告知」他人秘辛且無動機 → 改寫 */
+ var BETRAY=/把這事告訴|把此事告|轉告了|密報給|說與|告知了|告訴了|對.{1,6}說起了.{0,10}身世|宣揚/;
+ if(Facts.preAI){
+  var _pre=Facts.preAI;
+  Facts.preAI=function(r,a){
+   r=_pre(r,a);
+   try{
+    if(!on()||!r||!r.scene)return r;
+    var sp=r.speaker;if(!sp||!NPC[sp])return r;
+    var L=Facts.F().list,txt=String(r.scene);
+    for(var i=0;i<L.length;i++){
+     var f=L[i];if(f.sub!=='p'||f.vis>=2||f.st==='refuted')continue;
+     if(!Seal.isSealed(sp,f))continue;
+     if(Seal.hasMotive(sp,f,{allow:ALLOW.test((a&&a.text)||''),force:FORCE.test((a&&a.text)||'')}))continue;
+     /* 守秘者在對白中主動宣揚 */
+     if(BETRAY.test(txt)||(f.t&&txt.indexOf(f.t.slice(0,6))>=0&&/告訴|轉告|密報|說與/.test(txt))){
+      r.scene=txt.replace(BETRAY,'按下未說').replace(/告訴了[^。]{1,12}/g,'沉默不語').replace(/密報給[^。]{1,8}/g,'把話吞了回去');
+      if(Facts.stat)Facts.stat.sealFix=(Facts.stat.sealFix||0)+1;
+      try{toast('🛡 已攔截無故洩密（'+NPC[sp].n+'應為你守秘）',2600);}catch(e){}
+     }
+    }
+   }catch(e2){}
+   return r;
+  };
+ }
+
+ /* 舊存檔：標記 via 玩家的 exp 為 seal；可再用謠言平息 */
+ Seal.migrate=function(){
+  if(!S||!S.x||!S.x.facts)return;
+  var L=Facts.F().list;
+  for(var i=0;i<L.length;i++){
+   var f=L[i];if(f.sub!=='p')continue;
+   f.seal=f.seal||{};
+   if(f.exp){for(var K in f.exp){if(!f.seal[K])f.seal[K]={d:f.exp[K]===1?S.day:S.day,why:'told'};}}
+   /* hist：自玩家處得知 */
+   for(var j=0;j<(f.hist||[]).length;j++){
+    var t=f.hist[j].t||'';var m=t.match(/^(.+?)自(.+?)處得知$/);
+    if(m&&m[2]===S.p.name){for(var id in NPC){if(NPC[id].n===m[1]&&!f.seal[id])f.seal[id]={d:S.day,why:'told'};}}
+   }
+  }
+  try{if(window.Pace&&Pace.audit)Pace.audit(true);}catch(e){}
+ };
+ var _lo=loadObj;
+ loadObj=function(o){var r=_lo(o);try{if(on())Seal.migrate();}catch(e){}return r;};
+ var _sg=startGame;
+ startGame=function(cfg){var r=_sg(cfg);try{if(S&&S.x&&S.x.facts)Seal.migrate();}catch(e){}return r;};
+
+ /* 面板提示 */
+ if(PANELS.secret){
+  var _ps=PANELS.secret;
+  PANELS.secret=function(){
+   var h=_ps();
+   try{if(on())h='<div class="hint" style="margin-bottom:6px">🛡 守秘：你親口告知的人預設不外傳；可用「允許傳話給某人」或「謠言平息」。</div>'+h;}catch(e){}
+   return h;
+  };
+ }
+
+ Seal.report=function(){var n=0,s=0;try{var L=Facts.F().list;for(var i=0;i<L.length;i++){if(L[i].seal){for(var k in L[i].seal)s++;n++;}}}catch(e){}return {facts:n,seals:s,stat:Facts.stat||{}};};
+})();
+
 /* ---- 99_boot.js ---- */
 /* ===== 啟動（最後載入）===== */
 boot();
