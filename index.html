@@ -20991,6 +20991,230 @@ var Speak=window.Speak={};
  window.addEventListener('load',function(){Speak.initUI();});
 })();
 
+/* ---- 77_worldsane.js ---- */
+/* ===== 秦風 · M26 世界節制（WS）：被捕／重大事件全局上限與冷卻、罪證／動機／權力檢查、前因說明、近期大事 ===== */
+var WS={};
+(function(){
+ if(!window.World)return;
+ DEFSET.wsane=true;
+ (function(){var i;for(i=0;i<SETSCHEMA.length;i++){if(SETSCHEMA[i][0]==='ncmd')break;}if(i>=SETSCHEMA.length)i=SETSCHEMA.length;
+  SETSCHEMA.splice(i,0,['wsane','check','世界節制（NPC 被捕／重大事件限頻，須有前因）']);})();
+ function on(){return SET.wsane!==false;}
+ WS.on=on;
+ function nmx(id){return id==='p'?S.p.name:(NPC[id]?NPC[id].n:'某人');}
+ function st(){var x=S.x;if(!x.ws)x.ws={ver:1,maj:[],brief:[],stat:{jail:0,jailBlk:0,noEv:0,noAuth:0,rift:0,riftBlk:0,death:0,deathBlk:0}};var s=x.ws;
+  if(!s.maj)s.maj=[];if(!s.brief)s.brief=[];if(!s.stat)s.stat={};return s;}
+ WS.st=st;
+ /* ---- 節奏參數 ---- */
+ function paceK(){return SET.pace==='fast'?'fast':(SET.pace==='mid'?'mid':'slow');}
+ var CAP30={jail:{low:1,mid:2,high:3},major:{low:1,mid:2,high:3}};
+ var CD={jail:{slow:12,mid:9,fast:6},major:{slow:14,mid:10,fast:7}};
+ var PMUL={slow:0.55,mid:0.75,fast:1};
+ WS.cap=function(k){var c=CAP30[k==='jail'?'jail':'major'][SET.wdens]||2;if(paceK()==='slow'&&c>1&&k!=='jail')c--;return c;};
+ WS.cd=function(k){return CD[k==='jail'?'jail':'major'][paceK()];};
+ WS.recent=function(k,days){var s=st(),n=0;for(var i=0;i<s.maj.length;i++){var m=s.maj[i];if(S.day-m.d<days&&(k==='any'||m.k===k||(k==='major'&&m.k!=='jail'))&&!m.pl)n++;}return n;};
+ WS.lastD=function(k){var s=st(),d=-999;for(var i=0;i<s.maj.length;i++){var m=s.maj[i];if(!m.pl&&(m.k===k||(k==='major'&&m.k!=='jail')))d=Math.max(d,m.d);}return d;};
+ /* 與玩家相關：認識、同區、或線索涉及玩家 */
+ WS.rel=function(id){if(!id||id==='p')return true;try{if(window.Pace&&Pace.knows(id)&&Pace.relevant(id))return true;}catch(e){}var r=S.rel[id];return !!(r&&r.met&&(r.tr+r.af>=30||r.ha>=25||r.lo>=15));};
+ /* 自主（非玩家驅動）的重大事件是否放行 */
+ WS.allow=function(k,ids){
+  if(!on())return true;
+  var s=st();
+  var g=window.Pace?Pace.days():S.day;
+  if(g<8){return false;}
+  if(WS.recent(k==='jail'?'jail':'major',30)>=WS.cap(k))return false;
+  if(S.day-WS.lastD(k==='jail'?'jail':'major')<WS.cd(k))return false;
+  var rel=(ids||[]).some(function(i){return WS.rel(i);});
+  var p=PMUL[paceK()]*(rel?1:0.45);
+  return rand()<p;
+ };
+ /* ---- 記錄＋近期大事 ---- */
+ WS.know=function(ev){/* 玩家是否合理知道起因 */
+  if(!ev)return 0;var w=World.W();
+  for(var i=0;i<w.hear.length;i++){if(w.hear[i].ev===ev.i)return 2;}
+  if(ev.reg===S.p.region&&ev.pub>=1)return 1;
+  return 0;};
+ WS.record=function(o){
+  var s=st();var e={d:S.day,k:o.k,who:o.who||'',what:o.what||'',why:o.why||'',tag:o.tag||'傳聞',pl:o.pl?1:0,ids:o.ids||[]};
+  s.maj.push(e);if(s.maj.length>40)s.maj.shift();
+  return e;};
+ WS.line=function(e){return (e.tag?'〔'+e.tag+'〕':'')+e.who+e.what+(e.why?'——'+e.why:'');};
+ WS.brief=function(days){days=days||30;var s=st();return s.maj.filter(function(e){return S.day-e.d<=days;}).slice(-10).reverse();};
+ /* ---- 證據：從既有事件找目標的實際把柄 ---- */
+ var EVD={bribe:'曾暗中行賄',plot:'曾與人密謀對付他人',romance:'私情敗露',betray:'曾出賣同僚',revenge:'曾暗害他人',forgery:'涉偽造文書',theft:'涉盜竊',poison:'涉下藥',plant:'涉栽贓',feud:'曾當眾鬥毆'};
+ var EVK={bribe:'行賄',plot:'結黨密謀',romance:'私通',betray:'出賣同僚',revenge:'暗害他人',forgery:'偽造詔令',theft:'盜竊',poison:'下藥',plant:'栽贓',feud:'當眾鬥毆'};
+ WS.evidence=function(target){var w=World.W(),best=null;
+  for(var i=w.ev.length-1;i>=0;i--){var e=w.ev[i];if(S.day-e.d>150)break;if(!EVK[e.k])continue;
+   var inv=(e.a===target)||(e.k==='bribe'&&e.b===target)||(e.k==='romance'&&(e.a===target||e.b===target)&&e.pub>=2);
+   if(!inv)continue;if(e.k==='romance'&&e.pub<2)continue;
+   var strn=(e.k==='plot'||e.k==='bribe'||e.k==='forgery'||e.k==='poison')?2:1;
+   var rcv=(e.k==='bribe'&&e.b===target);
+   if(!best||strn>best.str)best={ev:e,what:rcv?'受賄':EVK[e.k],str:strn,text:e.t,desc:rcv?'曾收受賄賂':EVD[e.k]};}
+  return best;};
+ WS.motive=function(a,c){if(!a||!c||!NPC[a])return 0;var r=S.nrel[a+'>'+c];var m=0;if(r){if(r.b<-15)m+=1;if(r.su>=35)m+=1;}
+  try{var ns=World.NS(a);if(ns.plots&&ns.plots[c]>=2)m+=1;if(ns.goal==='rv')m+=0.5;}catch(e){}
+  if(NPC[a].f!==NPC[c].f)m+=0.3;return m;};
+ WS.authority=function(by,target){var b=NPC[by],t=NPC[target];if(!b||!t)return false;
+  if(by===S.emp||by===S.reg)return true;if(target===S.emp)return false;
+  if(b.tier>=4)return t.tier<=4&&target!==S.emp;
+  return b.tier>=2&&b.tier>=t.tier+1;};
+ /* ---- 重寫 World.accuse：須有罪證或強動機＋審理者有權＋全局節流 ---- */
+ var _acc=World.accuse;
+ World.accuse=function(by,target,what,str,opt){
+  if(!on())return _acc(by,target,what,str);
+  opt=opt||{};
+  var tn=NPC[target];if(!tn||!alive(target))return null;var bn=NPC[by];
+  var ns=World.NS(target);if(ns.jail>S.day)return null;
+  var player=!!opt.player||World._plAcc;
+  var inst=opt.inst||by;
+  var evd=player?{what:what||'不法',str:str||1,text:'有人呈上證據',pl:1}:WS.evidence(target);
+  var mot=WS.motive(inst,target);
+  var s=st();
+  if(!player&&!evd&&mot<1.5){s.stat.noEv=(s.stat.noEv||0)+1;World.NS(inst).mem.push({d:S.day,t:'想找'+nmx(target)+'的把柄，卻一無所獲',w:target,v:-1});return null;}
+  if(!WS.authority(by,target)){s.stat.noAuth=(s.stat.noAuth||0)+1;
+   if(!player)return null;}
+  var crime=evd?evd.what:(what||'言行不謹');var stn=evd?evd.str:1;
+  var ev=World.note({k:'accuse',a:inst,b:by,c:target,reg:locOf(target),t:nmx(inst)+'向'+nmx(by)+'告發'+nmx(target)+'：'+crime,pub:evd?1:0,imp:2});ev.what=crime;
+  World.NS(target).mem.push({d:S.day,t:nmx(by)+'查辦我：'+crime,w:by,v:-2});
+  var p=18+stn*16+(bn?bn.tier*5:0)-tn.tier*6+(mot>=2?6:0);
+  if(!evd)p=Math.min(p,10);
+  if(!WS.authority(by,target))p=-1;
+  var allowed=player||WS.allow('jail',[target,inst,by]);
+  if(!allowed){s.stat.jailBlk=(s.stat.jailBlk||0)+1;ev.t+='（尚在查訪，未有定論）';return ev;}
+  if(roll(p)){
+   var days=12*stn+rnd(15);ns.jail=S.day+days;
+   var why=evd?(evd.pl?'起因：有人呈上'+crime+'的證據':'起因：'+evd.text.replace(/\s+/g,'').slice(0,30)):'起因不明，有人說是誣陷';
+   var know=evd&&evd.ev?WS.know(evd.ev):(player?2:0);
+   if(evd&&!evd.pl&&know===0)why='據傳起因：'+nmx(target)+(evd.desc||'有不法之事')+'（詳情不明）';
+   ev.t=nmx(target)+'因「'+crime+'」被'+nmx(by)+'下獄';ev.pub=2;ev.imp=4;ev.why=why;
+   World.NS(by).mem.push({d:S.day,t:'將'+nmx(target)+'下獄',w:target,v:1});nrSus(by,target,20);nrBond(by,target,-20);
+   if(S.fac[tn.f]&&tn.tier>=3)S.fac[tn.f].pw=clamp(S.fac[tn.f].pw-1,0,100);
+   World.note({k:'jail',a:target,b:by,reg:locOf(target),t:ev.t+'。'+why,pub:1,imp:4});
+   var tag=player?'你所為':(know>=1?'消息':'傳聞');
+   var rec=WS.record({k:'jail',who:nmx(by),what:'以「'+crime+'」之罪將'+nmx(target)+'下獄',why:why,tag:tag,pl:player,ids:[target,by]});
+   s.stat.jail=(s.stat.jail||0)+1;
+   try{addNews(nmx(by)+'以「'+crime+'」將'+nmx(target)+'下獄（'+why+'）。');}catch(e){}
+  }else{ev.t+='（查無實據，不了了之）';nrSus(target,by,8);nrBond(target,by,-8);}
+  return ev;};
+ /* 玩家呈證（50_inv）走玩家通道，不受全局節流 */
+ if(window.INV)['tip','present'].forEach(function(k){var o=INV[k];if(typeof o!=='function')return;INV[k]=function(){World._plAcc=1;try{return o.apply(this,arguments);}finally{World._plAcc=0;}};});
+ /* ---- 暗殺／處死等：自主模擬時節流 ---- */
+ var inSlot=0;
+ var _ts=World.tickSlot;World.tickSlot=function(n){inSlot=1;try{return _ts.apply(this,arguments);}finally{inSlot=0;}};
+ var _cd=World.canDie;World.canDie=function(id){var r=_cd(id);if(!r||!inSlot||!on())return r;
+  if(!WS.allow('death',[id])){st().stat.deathBlk=(st().stat.deathBlk||0)+1;return false;}return true;};
+ var _kn=killNpc;killNpc=function(id,cause,killer,silent){
+  var was=alive(id);var r=_kn.apply(this,arguments);
+  try{if(on()&&was&&!alive(id)&&S&&S.x&&!WS._noRec){
+   var pl=killer==='p'||WS._plCtx;var why=WS._why||(killer&&NPC[killer]?(inSlot?'據傳'+nmx(killer)+'與其素有嫌隙':'起因：'+nmx(killer)+'與其衝突'):'');
+   if(/病/.test(cause||''))why='';
+   WS.record({k:'death',who:nmx(id),what:(cause||'身亡'),why:why,tag:pl?'你所為':(inSlot?'傳聞':'消息'),pl:pl||/病/.test(cause||''),ids:[id,killer||'']});
+   st().stat.death=(st().stat.death||0)+1;}}catch(e){}
+  return r;};
+ /* ---- 內訌（02_engine resolveRift）：節流＋前因 ---- */
+ if(typeof resolveRift==='function'){
+  var _rr=resolveRift;
+  resolveRift=function(a,b){
+   if(!on())return _rr(a,b);
+   if(!WS.allow('rift',[a,b])){st().stat.riftBlk=(st().stat.riftBlk||0)+1;nrSus(a,b,-6);return;}
+   var su=(S.nrel[a+'>'+b]||{}).su||0;
+   WS._why='起因：'+nmx(a)+'對'+nmx(b)+'猜忌日深';
+   var n0=S.news.length;
+   try{_rr(a,b);}finally{WS._why='';}
+   var nw=S.news[S.news.length-1];
+   if(S.news.length>n0&&nw){
+    var tag=(WS.rel(a)||WS.rel(b))?'消息':'傳聞';
+    WS.record({k:'rift',who:'',what:nw.t.replace(/。$/,''),why:'起因：'+nmx(a)+'對'+nmx(b)+'猜忌日深',tag:tag,ids:[a,b]});
+    st().stat.rift=(st().stat.rift||0)+1;}
+  };
+ }
+ /* 消息附前因：rift 等原始文字補上「起因」 */
+ var _an=addNews;addNews=function(t){
+  try{if(WS._why&&on()&&String(t).indexOf('起因')<0)t=String(t).replace(/。?$/,'')+'（'+WS._why+'）。';}catch(e){}
+  return _an(t);};
+ /* ---- 延遲公開的重複消息：jail 事件不再重複發布 ---- */
+ var _note=World.note;World.note=function(o){if(on()&&o&&o.k==='jail'&&o.pub>=2)o.pub=1;return _note(o);};
+ /* ---- Canon：NPC 動態附前因 ---- */
+ var _cl=World.canonLines;World.canonLines=function(c){var L=_cl(c);
+  try{if(on()){var b=WS.brief(60);if(b.length)L.push('◆近期大事（含前因；標「傳聞」者玩家僅耳聞，AI 不得當作玩家親見）：\n'+b.slice(0,c?3:6).map(WS.line).join('\n'));}}catch(e){}
+  return L;};
+ /* ---- AI 規則 ---- */
+ var _wr=AI.worldRules;AI.worldRules=function(short){var t=_wr(short);
+  try{if(on())t+=short?'【世界節制】不可無前因拿人、下獄、處死或大轉折；玩家未明確下令時，NPC 不得拿下他人或玩家。':'【世界節制・硬規則】任何 NPC 被捕、下獄、處死、叛變、改朝換代等重大轉折，必須有前文已建立的前因（罪證、動機）且由有權者下令；不得無故拿人或突然急轉。與玩家無關的大事只作一筆傳聞，不展開。玩家未明確下令時，不得讓 NPC 拿下、囚禁或處死他人或玩家（玩家犯行被當場撞破者除外）。寫世界變化時一句交代「誰、做了什麼、為什麼」；玩家不可能知道的部分寫作「傳聞」或「不明」。';}catch(e){}
+  return t;};
+ /* ---- 近期大事：節點＋天下面板 ---- */
+ NODES.wsBrief=function(){
+  var b=WS.brief(30);var t='【近期大事】（近三十日）\n';
+  if(!b.length)t+='近來朝野無大事。';
+  else b.forEach(function(e){t+='・'+dateStr(e.d)+' '+WS.line(e)+'\n';});
+  t+='\n（「傳聞」：你僅耳聞，未必屬實；「消息」：身邊傳來、大致可信；「你所為」：你親手促成。）';
+  return {t:t,sp:'',bg:S.p.spot,kind:'menu',ch:[ch('↩ 返回','hub')],noai:1};
+ };
+ if(window.QHUB)QHUB.push({cond:function(){return !!S.x&&on();},t:'📰 近期大事',go:'wsBrief',g:'謀略'});
+ var _pw=PANELS.world;PANELS.world=function(){var h=_pw();
+  try{if(on()){var b=WS.brief(30);h+='<div class="sec"><h4>近期大事（三十日）</h4>';
+   if(!b.length)h+='<span class="hint">近來朝野無大事。</span>';
+   else b.slice(0,8).forEach(function(e){h+='<div class="row st" style="display:block;font-size:13px">'+esc(dateStr(e.d)+' '+WS.line(e))+'</div>';});
+   h+='</div>';}}catch(e){}
+  return h;};
+ /* ---- Ncmd：只在玩家明確下令時觸發；下令者須有權 ---- */
+ if(window.Ncmd){
+  var HYP=/為何|為什麼|何故|是否|可曾|會不會|是不是|嗎|若是|若|如果|假如|倘若|要是|萬一|聽說|據說|傳聞|聽聞|擔心|害怕|恐怕|只怕|生怕|不要|別讓|別叫|莫要|休要|不可|豈|難道|曾經|昨日|前日|當年|夢見/;
+  var _np=Ncmd.parse;
+  Ncmd.parse=function(text){var c=_np(text);if(!c)return c;
+   if(on()){var t=String(text).replace(/\s+/g,'');var body=t.replace(/^[\/#]?(命令|指令|【指令】)?/,'');
+    if(HYP.test(body)||/[？?]/.test(t))return null;}
+   return c;};
+  /* 說話模式自然句：需「某人＋命人／下令」開頭，且非請求／勸說語氣 */
+  Ncmd.natOK=function(text){var t=String(text||'').replace(/\s+/g,'');
+   if(/吧|請|求|望|願|您|你|勸|何不|不如|應當|應該|該/.test(t))return false;
+   var m=t.match(/^(.{1,6}?)(命人|派人|差人|下令|喝令|傳令|命令|吩咐|要我|命我|令我|派我|讓我|教我)/);if(!m)return false;
+   if(/大王|陛下|王上|主公|夫人|大人/.test(m[1])&&!/嬴政|秦王/.test(m[1]))return false;
+   return true;};
+  if(window.Speak&&Speak.classify){
+   var _cls=Speak.classify;
+   Speak.classify=function(text,mode){var c=_cls(text,mode);
+    try{if(on()&&c&&c.ck==='ncmd'&&!c.pfx&&mode!=='cmd'&&!Ncmd.natOK(c.cmd)){
+     if(c.kind==='cmd'){c.kind='say';c.say=[c.raw];c.cmd='';c.ck='';c.to=Speak.target(c.raw);}
+     else if(c.kind==='mixed'){c.say=c.say.concat([c.cmd]);c.cmd='';c.ck='';c.kind='say';}
+     c._ncmdDemote=1;}}catch(e){}
+    return c;};
+  }
+  /* 移除「任何 AI 呼叫文字都解析命令」：只對玩家本回合明確指令附加命令規則 */
+  var _um=AI.userMsg;AI.userMsg=function(a){
+   if(on()&&!Ncmd._pend&&a&&a.text&&Ncmd.parse(a.text)){var sv=Ncmd.parse;Ncmd.parse=function(){return null;};try{return _um(a);}finally{Ncmd.parse=sv;}}
+   return _um(a);};
+  /* 權力檢查：拿下 NPC 須有權；暗殺至尊多半失敗。結果併入世界狀態與近期大事 */
+  var _ex=Ncmd.exec;
+  Ncmd.exec=function(cmd,aiText){
+   if(!on()||!cmd||cmd.to==='p'||cmd.onPlayer||!NPC[cmd.to])return _ex(cmd,aiText);
+   var from=cmd.from,to=cmd.to;
+   if(cmd.k==='arrest'&&!WS.authority(from,to)){
+    var narr=nmx(from)+'厲聲下令拿下'+nmx(to)+'。衛士面面相覷——'+nmx(from)+'無權處置'+nmx(to)+'，無人敢動手。'+nmx(to)+'冷冷看了'+nmx(from)+'一眼，此事很快傳了出去。';
+    nrSus(to,from,25);nrBond(to,from,-20);
+    try{Ncmd.record(cmd,{do:1,why:'無權，衛士不從'});}catch(e){}
+    WS.record({k:'cmd',who:nmx(from),what:'下令拿下'+nmx(to)+'，衛士不從',why:'起因：你的指令；'+nmx(from)+'權位不足',tag:'你所為',pl:1,ids:[from,to]});
+    return {t:(aiText||'【命令・拿捕】\n'+narr),sp:from,bg:S.p.spot,kind:'event',ch:[ch('💬 繼續','talkMenu',{id:from}),ch('📜 行動選單','hub')],_ncmd:1,_sysCh:1,tag:'命令',ai:aiText?1:0};
+   }
+   if((cmd.k==='kill'||cmd.k==='poison')&&to===S.emp){
+    var n2=nmx(from)+'暗中派人行刺'+nmx(to)+'。刺客未及近身，便被郎衛格殺於殿前。宮中戒嚴，徹查主使。';
+    nrSus(to,from,30);
+    try{Ncmd.record(cmd,{do:1,why:'行刺未遂'});}catch(e){}
+    WS.record({k:'cmd',who:nmx(from),what:'派人行刺'+nmx(to)+'未遂',why:'起因：你的指令',tag:'你所為',pl:1,ids:[from,to]});
+    return {t:(aiText||'【命令・'+cmd.lab+'】\n'+n2),sp:from,bg:S.p.spot,kind:'event',ch:[ch('💬 繼續','talkMenu',{id:from}),ch('📜 行動選單','hub')],_ncmd:1,_sysCh:1,tag:'命令',ai:aiText?1:0};
+   }
+   WS._plCtx=1;WS._why='起因：你的指令（'+nmx(from)+'下令）';
+   var sc;try{sc=_ex(cmd,aiText);}finally{WS._plCtx=0;WS._why='';}
+   if(cmd.k==='arrest'){var ns=World.NS(to);ns.jail=S.day+20+rnd(20);
+    WS.record({k:'jail',who:nmx(from),what:'下令將'+nmx(to)+'下獄',why:'起因：你的指令',tag:'你所為',pl:1,ids:[from,to]});
+    try{World.note({k:'jail',a:to,b:from,reg:locOf(to),t:nmx(to)+'被'+nmx(from)+'下令下獄（玩家指令）',pub:1,imp:4});}catch(e){}}
+   else if((cmd.k==='kill'||cmd.k==='poison')&&alive(to)){
+    WS.record({k:'cmd',who:nmx(from),what:'派人'+cmd.lab+nmx(to)+'，'+nmx(to)+'重傷倖免',why:'起因：你的指令',tag:'你所為',pl:1,ids:[from,to]});}
+   return sc;};
+ }
+ WS.report=function(){var s=st();return {stat:s.stat,maj:s.maj.length,j30:WS.recent('jail',30),m30:WS.recent('major',30)};};
+})();
+
 /* ---- 99_boot.js ---- */
 /* ===== 啟動（最後載入）===== */
 boot();
