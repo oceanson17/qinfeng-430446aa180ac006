@@ -21215,6 +21215,287 @@ var WS={};
  WS.report=function(){var s=st();return {stat:s.stat,maj:s.maj.length,j30:WS.recent('jail',30),m30:WS.recent('major',30)};};
 })();
 
+/* ---- 78_decl.js ---- */
+/* ===== 秦風 · M27 劇情設定／宣告（Decl）：玩家以作者身分宣告世界事實，系統令其成真 ===== */
+var Decl=window.Decl={};
+(function(){
+ DEFSET.decld=true;
+ (function(){var i;for(i=0;i<SETSCHEMA.length;i++){if(SETSCHEMA[i][0]==='inmode'){SETSCHEMA[i][3]=[['say','說（對眼前人說話）'],['cmd','指令（行動／命令／身份）'],['decl','設定劇情（宣告世界事實）']];SETSCHEMA[i][2]='自由輸入預設模式（說話／指令／設定劇情）';break;}}
+  for(i=0;i<SETSCHEMA.length;i++){if(SETSCHEMA[i][0]==='inmode')break;}
+  SETSCHEMA.splice(i+1,0,['decld','check','劇情設定（/設定 那人便是嬴政 → 令其成真）']);})();
+ function on(){return SET.decld!==false;}
+ Decl.on=on;
+ function nmx(id){return id==='p'?S.p.name:(NPC[id]?NPC[id].n:'某人');}
+ var PFX=/^\s*(\/|／)(設定|设定|劇情|剧情|宣告|旁白|作者)\s*[:：]?\s*/;
+ var PRON='那人|此人|這人|这人|那位|這位|對方|眼前之人|眼前人|那男子|那女子|那老者|那少年|那漢子|他|她';
+ var IDV='便是|就是|正是|乃是|其實是|其实是|原來是|原来是|竟是|實為|实为|即是|是';
+ function aliasId(s){s=String(s||'');
+  if(/華陽/.test(s))return 'huayang';if(/夏太/.test(s))return 'xiatai';if(/太后|趙姬/.test(s))return 'zhaoji';
+  if(/大王|秦王|嬴政|趙政|陛下|王上/.test(s))return S&&S.emp&&NPC[S.emp]&&/大王|陛下|王上/.test(s)?S.emp:'yingzheng';
+  if(/相邦|呂不韋|仲父/.test(s))return 'lbw';
+  var ids=[];try{ids=mentioned(s);}catch(e){}if(ids[0])return ids[0];
+  var best='',bl=0;for(var i=0;i<NPCS.length;i++){var nn=NPCS[i].n;if(nn&&nn.length>=2&&s.indexOf(nn)>=0&&nn.length>bl){best=NPCS[i].id;bl=nn.length;}}return best;}
+ Decl.alias=aliasId;
+ function hereIds(){var r=[];try{r=hereNpcs().filter(function(id){return spotOf(id)===S.p.spot&&!NPC[id].child;});}catch(e){}return r;}
+ Decl.here=hereIds;
+ /* 找上一幕的無名人物描述（如「街角那褐衣佩劍之人」） */
+ Decl.figure=function(text){
+  var m=String(text||'').match(/((?:街角|角落|對面|人群中|門口|樹下|攤前|身後|遠處|不遠處)?那?[^，。「」！？\s]{0,8}(?:之人|的人|男子|女子|老者|少年|漢子|書生|劍客))/);
+  if(m&&m[1].length>=3)return m[1].replace(/^那/,'');
+  return '';};
+ /* ---------- 解析 ---------- */
+ Decl.parse=function(text){
+  var raw=String(text||'').replace(PFX,'').replace(/^\s+|\s+$/g,'');if(!raw)return null;
+  var t=raw.replace(/\s+/g,'');
+  var d={raw:raw,id:null,want:null,ally:null,feel:null,generic:[]};
+  var clauses=t.split(/[，,。；;！!]/).filter(Boolean);
+  var lastRef='';
+  clauses.forEach(function(cl){
+   var m;
+   /* 身分：那人便是X／X就是那人 */
+   m=cl.match(new RegExp('^(?:原來|原来|其實|其实|其實那|那個)?(.{0,10}?)('+IDV+')(.{1,8})$'));
+   if(m&&!/的(人|心腹|細作|眼線|門客|手下|親信|探子)$/.test(m[3])&&!/^我/.test(m[1])){
+    var who=aliasId(m[3]);var refTxt=m[1];
+    var refIsPron=!refTxt||new RegExp('('+PRON+')$').test(refTxt)||/(之人|的人|男子|女子|老者|少年|漢子|書生|劍客)$/.test(refTxt);
+    var refId=refIsPron?'':aliasId(refTxt);
+    if(who&&!d.id&&(refIsPron||(refId&&refId!==who))){d.id={who:who,ref:refTxt,refId:refId,desc:/(之人|的人|男子|女子|老者|少年|漢子|書生|劍客)$/.test(refTxt)?refTxt.replace(/^那/,''):''};lastRef=who;return;}
+   }
+   /* 動機：X想結識我 */
+   m=cl.match(/^(.{0,8}?)(?:很|頗|一直|早就|早已|正)?(想要|想|欲|有意|打算|願意|願|要)(結識|認識|結交|拜會|拜見|見見|見|招攬|收留|收|親近|接近|娶|迎娶)(我|你)/);
+   if(m){var w=m[1]?(new RegExp('^('+PRON+')$').test(m[1])?'':aliasId(m[1])):'';d.want={who:w||'',pron:!w,verb:m[3]};if(w)lastRef=w;return;}
+   /* 歸屬：原來Y是Z的人 */
+   m=cl.match(/^(?:原來|原来|其實|其实)?(.{1,8}?)(?:是|乃|竟是|其實是)(.{1,8}?)的(人|心腹|細作|眼線|門客|手下|親信|探子|舊部)$/);
+   if(m){var y=new RegExp('^('+PRON+')$').test(m[1])?'':aliasId(m[1]);var z=aliasId(m[2]);if(z){d.ally={y:y,pron:!y,z:z,role:m[3]};return;}}
+   /* 情感：X喜歡／恨我 */
+   m=cl.match(/^(.{0,8}?)(暗戀|愛慕|傾心於|傾心|喜歡|心儀|恨|忌恨|憎恨|提防|想殺|想害|欠)(我)/);
+   if(m){var f=m[1]?(new RegExp('^('+PRON+')$').test(m[1])?'':aliasId(m[1])):'';d.feel={who:f,pron:!f,k:m[2]};return;}
+   d.generic.push(cl);
+  });
+  if(!d.id&&!d.want&&!d.ally&&!d.feel&&!d.generic.length)return null;
+  return d;};
+ /* 是否明顯是宣告（給 /指令 與指令模式智能分流用） */
+ Decl.detect=function(text){var d=Decl.parse(text);return !!(d&&(d.id||d.want||d.ally||d.feel));};
+ /* ---------- 指代解析 ---------- */
+ Decl.resolve=function(d){
+  var sp=(S.scene&&S.scene.sp&&NPC[S.scene.sp]&&alive(S.scene.sp))?S.scene.sp:'';
+  var main=d.id?d.id.who:'';
+  if(d.want&&!d.want.who)d.want.who=main||sp||hereIds()[0]||'';
+  if(d.ally&&!d.ally.y)d.ally.y=main||sp||'';
+  if(d.feel&&!d.feel.who)d.feel.who=main||sp||'';
+  d.sp0=sp;
+  if(!d.id&&d.want&&d.want.who&&d.want.who!==sp)d.bring=d.want.who;
+  return d;};
+ /* ---------- 硬事實矛盾 ---------- */
+ Decl.conflict=function(d){
+  var ids=[];if(d.id)ids.push(d.id.who);if(d.want&&d.want.who)ids.push(d.want.who);if(d.bring)ids.push(d.bring);
+  for(var i=0;i<ids.length;i++){var id=ids[i];if(!NPC[id])continue;
+   if(!alive(id))return {k:'dead',id:id,why:nmx(id)+'已不在人世'};
+   if(window.World&&World.jailed&&World.jailed(id))return {k:'jail',id:id,why:nmx(id)+'此刻正被關押'};}
+  return null;};
+ function lenient(){return SET.diff==='easy'||SET.diff==='normal'||!SET.diff;}
+ /* ---------- 套用（狀態） ---------- */
+ function placeHere(id){
+  try{if(!S.npc[id])S.npc[id]={};if(locOf(id)!==S.p.region){S.flags['decl_l0_'+id]=locOf(id);}S.npc[id].l=locOf(id)===S.p.region?S.npc[id].l:S.p.region;
+   if(window.World&&World.NS){var ns=World.NS(id);ns.sp=S.p.spot;ns.spT=S.day*4+World.slotNow();ns.jail=0;}}catch(e){}
+ }
+ function incogOf(id){var n=NPC[id];if(!n)return false;var at=n.at||[];
+  return (id===S.emp||id==='yingzheng'||n.tier>=4)&&at.indexOf(S.p.spot)<0;}
+ Decl.incogName=function(id){if(id==='yingzheng')return '趙政';var n=NPC[id];return n?n.n.charAt(0)+'姓客人':'無名客';};
+ function fact(o){try{if(window.Facts&&Facts.ingest)Facts.ingest([o],{src:'free',force:1});}catch(e){}}
+ Decl.apply=function(d,opt){
+  opt=opt||{};var out={who:'',incog:false,adj:'',lines:[],chs:[],sp:''};
+  var cf=opt.adj?null:Decl.conflict(d);
+  if(cf&&cf.k==='jail'){try{World.NS(cf.id).jail=0;}catch(e){}out.lines.push('（設定調整：'+nmx(cf.id)+'剛剛獲釋。）');cf=null;}
+  var adj=opt.adj||(cf&&cf.k==='dead'?'heir':'');
+  var main=d.id?d.id.who:(d.bring||'');
+  if(adj&&main&&!alive(main)){out.adj=adj;}
+  var desc=(d.id&&d.id.desc)||Decl.figure(S.scene&&S.scene.t)||'那人';
+  var present=hereIds();
+  if(main&&alive(main)){
+   placeHere(main);out.who=main;out.sp=main;
+   out.incog=incogOf(main);
+   if(out.incog)S.flags['incog_'+main]=S.day;
+   if(d.id){
+    var kb=['p',main];var nk=present.filter(function(x){return x!==main;});if(d.sp0&&d.sp0!==main&&nk.indexOf(d.sp0)<0)nk.unshift(d.sp0);
+    fact({type:'status',subject:main,text:desc+'便是'+nmx(main)+(out.incog?'（微服，化名'+Decl.incogName(main)+'）':''),vis:'secret',knownBy:kb,notKnownBy:out.incog?nk:[],mag:1});
+    try{addMem(main,(out.incog?'微服至'+(THEMES[S.p.spot]||S.p.spot)+'，':'')+'在此遇見'+S.p.name);}catch(e){}
+   }
+  }
+  if(d.want&&d.want.who&&alive(d.want.who)){var w=d.want.who;
+   placeHere(w);out.who=out.who||w;out.sp=out.sp||w;
+   try{var r=R(w);r.af=clamp(r.af+10,0,100);r.tr=clamp(r.tr+4,0,100);}catch(e){}
+   S.flags['wantmeet_'+w]=S.day;
+   try{if(window.Bond&&Bond.on()){Bond.feelDelta(w,{af:6},'');Bond.note(w,'有意結識'+S.p.name);Bond.get(w).thought='想結識'+S.p.name;}}catch(e){}
+   try{if(window.Nom)Nom.remember(w,'想結識'+S.p.name,{k:'dlg',crit:1});addMem(w,'有意結識'+S.p.name);}catch(e){}
+   try{if(window.Pace)Pace.mark(w);}catch(e){}
+  }
+  if(d.ally&&d.ally.y&&d.ally.z&&NPC[d.ally.y]&&NPC[d.ally.z]){
+   try{nrBond(d.ally.y,d.ally.z,30);}catch(e){}
+   fact({type:'relationship',subject:d.ally.y,object:d.ally.z,kin:'other',text:nmx(d.ally.y)+'原來是'+nmx(d.ally.z)+'的'+d.ally.role,vis:'secret',knownBy:['p',d.ally.y,d.ally.z],mag:2});
+   out.lines.push('你終於看清：'+nmx(d.ally.y)+'原來是'+nmx(d.ally.z)+'的'+d.ally.role+'。');
+  }
+  if(d.feel&&d.feel.who&&NPC[d.feel.who]){var fw=d.feel.who,k=d.feel.k;
+   try{if(/戀|慕|傾心|喜歡|心儀/.test(k)){addRel(fw,'af',12,null);addRel(fw,'lo',10,null);out.lines.push(nmx(fw)+'看你的眼神，確實與旁人不同。');}
+    else if(/欠/.test(k)){S.flags['owe_'+fw]=S.day;out.lines.push(nmx(fw)+'確實欠你一個人情。');}
+    else{addRel(fw,'ha',12,null);addRel(fw,'su',10,null);out.lines.push(nmx(fw)+'對你的敵意，已是藏不住了。');}}catch(e){}
+  }
+  if(d.generic.length){var gt=d.generic.join('，').slice(0,80);
+   fact({type:'event',subject:out.who||d.sp0||'p',text:gt,vis:'secret',knownBy:['p'].concat(out.who?[out.who]:[]),mag:1});
+   S.x.decl=S.x.decl||[];S.x.decl.push({d:S.day,t:gt});if(S.x.decl.length>12)S.x.decl.shift();}
+  try{addLog('〔設定〕'+d.raw.slice(0,50));}catch(e){}
+  try{if(window.Canon)Canon.note('劇情設定：'+d.raw.slice(0,40)+'（'+dateStr()+'）');}catch(e){}
+  out.desc=desc;out.present=present;
+  return out;};
+ /* ---------- 離線場景 ---------- */
+ Decl.scene=function(d,o,label){
+  var t='',chs=[],sp=o.sp||'';
+  var main=o.who;
+  if(o.adj==='heir'&&d.id){var dn=nmx(d.id.who);
+   t+='（設定調整：'+dn+'已不在人世，改為——'+(o.desc||'那人')+'是'+dn+'的故人之後，自稱受'+dn+'遺命而來。）\n';
+   t+=(o.desc||'那人')+'走上前來，低聲道：「家主'+dn+'生前，曾提起過足下。」\n';
+   if(d.want)t+='他目光懇切：「在下想與足下結識。」\n';
+   chs=[ch('🤝 與他結識','hub'),ch('❓ 追問'+dn+'遺命','hub'),ch('📜 行動選單','hub')];
+   sp='';
+  }else if(main){
+   var n=NPC[main],nm0=n.n;var inc=o.incog;var alias=Decl.incogName(main);
+   if(d.id){t+=(o.desc&&o.desc!=='那人'?o.desc:'那人')+'——正是'+(inc?'微服出巡的':'')+nm0+'。\n';}
+   else if(d.bring){t+=nm0+'不知何時已來到'+(THEMES[S.p.spot]||'此處')+'。\n';}
+   if(d.want&&d.want.who===main){
+    t+=(inc?'他撇下遠處的隨從，':nm0)+'徑直朝你走來，在你面前站定，打量你片刻，'+(n.sex==='f'?'微微一笑':'拱手一笑')+'：「'+(inc?'在下'+alias+'。':'在下'+nm0+'。')+'見足下氣度不凡，想與足下結識，不知可否？」\n';
+    chs.push(ch('🤝 報上姓名，與'+(inc?'他':nm0)+'結交','declMeet',{id:main,op:'befriend'}));
+    if(inc)chs.push(ch('🙇 道破身分，上前拜見','declMeet',{id:main,op:'reveal'}));
+    chs.push(ch('🤐 不動聲色，看'+(n.sex==='f'?'她':'他')+'意欲何為','declMeet',{id:main,op:'feign'}));
+    chs.push(ch('🙅 婉拒結識','declMeet',{id:main,op:'decline'}));
+   }else{
+    t+=(n.sex==='f'?'她':'他')+'似乎尚未察覺你的目光。\n';
+    chs.push(ch('💬 上前與'+(inc?'那人':nm0)+'攀談','talkMenu',{id:main,pass:1}));
+    chs.push(ch('👀 暗中觀察','declMeet',{id:main,op:'watch'}));
+   }
+   var others=(d.sp0&&d.sp0!==main?[d.sp0]:(o.present||[]).filter(function(x){return x!==main&&NPC[x]&&alive(x);}).slice(0,1));
+   others.forEach(function(x){t+=nmx(x)+(inc?'看了那人一眼，並未認出他的身分。':'見狀，神色微動。')+'\n';});
+  }
+  if(o.lines.length)t+=o.lines.join('\n')+'\n';
+  if(!t){t='（設定已成真：'+d.raw.slice(0,60)+'）\n';var s0=d.sp0;if(s0)t+=nmx(s0)+'的神色，似乎印證了這一點。\n';
+   if(s0)chs.push(ch('💬 繼續與'+nmx(s0)+'交談','talkMenu',{id:s0,pass:1}));sp=s0||'';}
+  chs.push(ch('📜 行動選單','hub'));
+  return {t:(label?label+'\n\n':'')+'【劇情設定】\n'+t.replace(/\n+$/,''),sp:sp,bg:S.p.spot,kind:'event',ch:chs,_decl:1,_sysCh:1,tag:'設定'};
+ };
+ NODES.declMeet=function(a){var id=a.id,n=NPC[id];if(!n||!alive(id))return NODES.hub({});
+  var inc=!!S.flags['incog_'+id],r=R(id),t='',fx={rel:{}};fx.rel[id]={};
+  if(a.op==='befriend'){r.met=1;fx.rel[id]={af:6,tr:4};t='你報上姓名。'+(inc?'「'+Decl.incogName(id)+'」':n.n)+'含笑點頭：「好，今日便算相識了。」兩人並肩走了一段，言談甚歡。';}
+  else if(a.op==='reveal'){r.met=1;fx.rel[id]={su:4,re:4,af:2};t='你上前一步，低聲道破：「'+(id==='yingzheng'||id===S.emp?'大王':n.n)+'微服至此，可是有事？」'+n.n+'微微一怔，隨即失笑：「好眼力。」他示意你噤聲：「此處人多，莫要聲張。」';}
+  else if(a.op==='feign'){r.met=1;fx.rel[id]={af:3,su:-2};t='你只作不識，拱手還禮。'+(inc?'「'+Decl.incogName(id)+'」':n.n)+'似乎頗為受用，與你閒談起市井物價、坊間傳聞，言語間卻不時試探你的見識。';}
+  else if(a.op==='decline'){fx.rel[id]={af:-3};t='你婉言推辭。'+(inc?'那人':n.n)+'也不勉強，只深深看了你一眼：「後會有期。」';}
+  else{fx.rel[id]={};t='你退到一旁暗中觀察。'+(inc?'那人':n.n)+'在攤前駐足，似在打聽什麼，片刻後朝你這邊望了一眼。';}
+  var o=applyFx(fx);
+  return {t:t+fxLine(o),sp:id,bg:S.p.spot,kind:'event',ch:[ch('💬 與'+(inc?'他':n.n)+'交談','talkMenu',{id:id,pass:1}),ch('📜 行動選單','hub')],_sysCh:1};
+ };
+ /* 矛盾提示（困難以上） */
+ Decl.conflictScene=function(d,cf,label){
+  var t=(label?label+'\n\n':'')+'【劇情設定・需要調整】\n你的設定與已確立的事實矛盾：'+cf.why+'。\n可改用調整版本，讓設定在不違背正史的前提下成立：';
+  return {t:t,sp:'',bg:S.p.spot,kind:'event',ch:[ch('✅ 採用調整版：那人是'+nmx(cf.id)+'的故人之後','declAdj',{raw:d.raw,adj:'heir'}),ch('✏️ 改寫設定（重新輸入）','hub'),ch('↩ 取消此設定','hub')],_decl:1,_sysCh:1,tag:'設定'};
+ };
+ NODES.declAdj=function(a){var d=Decl.resolve(Decl.parse(a.raw));var o=Decl.apply(d,{adj:a.adj});return Decl.scene(d,o,'〔設定・劇情〕'+a.raw.slice(0,60));};
+ /* ---------- 主流程 ---------- */
+ Decl.label=function(raw){return '〔設定・劇情〕'+String(raw).replace(PFX,'').slice(0,60);};
+ Decl.run=function(text){
+  var d=Decl.parse(text);var label=Decl.label(text);
+  if(!d)return {t:label+'\n\n（未能解析設定內容。）',sp:'',bg:S.p.spot,kind:'event',ch:[ch('📜 行動選單','hub')]};
+  Decl.resolve(d);
+  var cf=Decl.conflict(d);
+  if(cf&&cf.k==='dead'&&!lenient())return Decl.conflictScene(d,cf,label);
+  var o=Decl.apply(d);
+  var off=Decl.scene(d,o,label);
+  if(SET.ai&&AI.ready()&&!AI.manual()){
+   Decl._pend={d:d,o:o,off:off,label:label};
+   return {t:'……',sp:o.sp||'',bg:S.p.spot,kind:'loading',ch:[],async:{type:'free',text:d.raw,decl:1,label:label,fb:{go:'declOffline',a:{}}}};
+  }
+  return off;};
+ NODES.declOffline=function(){var p=Decl._pend;Decl._pend=null;if(p)return p.off;return NODES.hub({});};
+ /* ---------- 掛鉤：最外層 freeText ---------- */
+ Decl.route=function(t,mode){
+  if(!on())return false;var s=String(t||'');
+  if(PFX.test(s))return true;
+  if(mode==='decl'&&!/^\s*(\/|／|#|＃)/.test(s))return true;
+  var body=s.replace(/^\s*((\/|／)指令|#|＃|【指令】)\s*[:：]?\s*/,'');
+  var pfxCmd=body!==s;
+  if((pfxCmd||mode==='cmd')&&Decl.detect(body)){
+   var ck='';try{ck=Speak.cmdKind(body);}catch(e){}
+   if(!ck||ck==='legacy')return true;}
+  return false;};
+ var _ft=NODES.freeText;
+ NODES.freeText=function(a){
+  var t=String((a&&a.text)||'');var mode=(a&&a.mode)||SET.inmode||'say';
+  if(Decl.route(t,mode)){try{if(window.Act)Act._pend=null;if(window.Ncmd)Ncmd._pend=null;}catch(e){}
+   var body=t.replace(PFX,'').replace(/^\s*((\/|／)指令|#|＃|【指令】)\s*[:：]?\s*/,'');return Decl.run(body);}
+  if(mode==='decl')a=Object.assign({},a,{mode:'cmd'});
+  return _ft(a);};
+ /* ---------- AI 提示＋事後檢查 ---------- */
+ var _um=AI.userMsg;
+ AI.userMsg=function(a){
+  if(!(a&&a.decl&&Decl._pend))return _um(a);
+  var sv1=window.Ncmd&&Ncmd.parse,sv2=window.Act&&Act.parse,sv3=window.Idn&&Idn.parseText;
+  try{if(sv1)Ncmd.parse=function(){return null;};if(sv2)Act.parse=function(){return null;};if(sv3)Idn.parseText=function(){return null;};var msg=_um(a);}
+  finally{if(sv1)Ncmd.parse=sv1;if(sv2)Act.parse=sv2;if(sv3)Idn.parseText=sv3;}
+  var p=Decl._pend,d=p.d,o=p.o,facts=[];
+  if(d.id&&o.who)facts.push((o.desc||'那人')+'就是'+nmx(o.who)+(o.incog?'（微服出巡，化名'+Decl.incogName(o.who)+'；在場其他人並不知道其身分）':''));
+  if(d.want&&d.want.who)facts.push(nmx(d.want.who)+'想結識玩家，此刻就在現場，下一幕必須由'+nmx(d.want.who)+'主動上前搭話開始');
+  if(d.ally&&d.ally.y)facts.push(nmx(d.ally.y)+'原來是'+nmx(d.ally.z)+'的'+d.ally.role);
+  if(d.feel&&d.feel.who)facts.push(nmx(d.feel.who)+(d.feel.k)+'玩家');
+  if(d.generic.length)facts.push(d.generic.join('，'));
+  msg+='\n【本回合輸入：劇情設定（玩家是作者）・硬規則】玩家以敘述者身分宣告：「'+d.raw.slice(0,100)+'」。以下已是成真的世界事實：'+facts.join('；')+'。'+
+   '必須照此寫出：直接描寫事實發生，不可寫成玩家的念頭、猜想、想像或錯覺；嚴禁出現「莫非」「荒唐」「心中忽生一念」「念頭」「不可能」「怎會」等否定或懷疑；'+(o.sp?'speaker 設為「'+o.sp+'」；':'')+'choices 必須按新局面重寫（例如與對方結識、道破身分、不動聲色）。';
+  return msg;};
+ var _wr=AI.worldRules;
+ AI.worldRules=function(short){var t=_wr(short);
+  try{if(on())t+=short?'【劇情設定】〔設定〕是玩家作者宣告的事實，必須照寫成真，不可寫成念頭或否定。':'【劇情設定・硬規則】玩家以 /設定（或〔設定・劇情〕）宣告的世界事實（如「那人便是嬴政」「X想結識我」「原來Y是Z的人」）一律視為真實，直接寫出其發生與後續；不可寫成玩家內心念頭、猜測、幻覺，不可用「莫非／荒唐／不可能」否定。只有與已故等硬事實衝突時，系統才會先提示調整。';}catch(e){}
+  return t;};
+ var BAD=/莫非|荒唐|心中忽生一念|忽生一念|此念|念頭|不可能|怎會|豈會|豈能|錯覺|幻覺|想像|臆想|胡思亂想|妄想|看錯|認錯|白日夢|癡人說夢|絕無可能|怎麼可能/;
+ Decl.verify=function(p,txt){var s=String(txt||'');if(p.label)s=s.split(p.label).join('');
+  var why=[];if(BAD.test(s))why.push('否定／當成念頭');
+  var w=p.o.who;if(w&&NPC[w]&&s.indexOf(NPC[w].n)<0&&!(p.o.incog&&s.indexOf(Decl.incogName(w))>=0))why.push('未寫到'+NPC[w].n);
+  return why;};
+ var _run=AI.run;
+ AI.run=function(a){
+  return _run(a).then(function(sc){
+   try{if(a&&a.decl&&Decl._pend&&sc){var p=Decl._pend;Decl._pend=null;
+    var bad=Decl.verify(p,sc.t);
+    if(bad.length){var off=p.off;off._declFix=bad.join(',');try{toast('⚠ AI 沒有照設定寫（'+bad.join('／')+'），已改用設定成真版本',3200);}catch(e1){}
+     try{if(window.Thread&&Thread.fixLast)Thread.fixLast(off);}catch(e2){}return off;}
+    if(sc.t&&sc.t.indexOf(p.label)<0)sc.t=p.label+'\n\n'+sc.t;
+    if(p.o.sp){sc.sp=p.o.sp;}sc._decl=1;sc.tag=sc.tag||'設定';
+    if(!sc.ch||sc.ch.length<2){sc.ch=p.off.ch;}
+   }}catch(e){Decl._pend=null;}
+   return sc;
+  },function(err){Decl._pend=null;throw err;});};
+ /* ---------- UI：說／指令／設定 三態切換 ---------- */
+ var PH={say:'對眼前人說話…（例：大王，臣冤枉；我對李斯說：此事拜託了）',cmd:'指令…（/行動 我拿起劍自刺｜/命令 呂不韋命人殺太后｜/身份 嬴政想我當妃子｜/設定 那人便是嬴政）',decl:'設定劇情…（例：那人便是嬴政，他想結識我｜原來李斯是呂不韋的人）'};
+ var LAB={say:'💬說',cmd:'⚙指令',decl:'📜設定'};
+ var NEXT={say:'cmd',cmd:'decl',decl:'say'};
+ var TIP={say:'💬 說話模式：直接輸入對白；句首加 / 或 # 即為指令',cmd:'⚙ 指令模式：例「/行動 我拿起劍自刺」「/命令 呂不韋命人殺太后」「/身份 嬴政想我當妃子」「前往 邯鄲」',decl:'📜 設定劇情：你是作者，宣告的事會成真。例「那人便是嬴政，他想結識我」「原來李斯是呂不韋的人」；也可在任何模式用 /設定 前綴'};
+ Decl.PH=PH;
+ Speak.mode=function(){var m=SET.inmode;return m==='cmd'||m==='decl'?m:'say';};
+ Speak.setMode=function(m,quiet){SET.inmode=(m==='cmd'||m==='decl')?m:'say';try{saveSettings();}catch(e){}Speak.paint();if(!quiet){try{toast(TIP[SET.inmode],4200);}catch(e2){}}};
+ function rebind(){['inmodebtn','kbmodebtn'].forEach(function(bid){var b=document.getElementById(bid);if(!b||b.getAttribute('data-decl'))return;
+   var nb=b.cloneNode(true);nb.setAttribute('data-decl','1');
+   if(bid==='kbmodebtn')nb.addEventListener('mousedown',function(e){e.preventDefault();});
+   nb.addEventListener('click',function(e){e.preventDefault();if(e.stopPropagation)e.stopPropagation();Speak.setMode(NEXT[Speak.mode()],bid==='kbmodebtn');if(bid==='kbmodebtn'){var ta=document.getElementById('kbta');if(ta)try{ta.focus();}catch(x){}}});
+   b.parentNode.replaceChild(nb,b);});}
+ Speak.paint=function(){var m=Speak.mode();rebind();
+  ['inmodebtn','kbmodebtn'].forEach(function(bid){var b=document.getElementById(bid);if(b){b.textContent=LAB[m];b.setAttribute('data-mode',m);b.title='目前：'+({say:'說話',cmd:'指令',decl:'設定劇情'})[m]+'模式（點擊切換：說→指令→設定）';}});
+  var f=document.getElementById('free');if(f)f.placeholder=PH[m];
+  var ta=document.getElementById('kbta');if(ta)ta.placeholder=PH[m];
+  var g=document.getElementById('freego');if(g)g.textContent=m==='say'?'說':(m==='cmd'?'執行':'設定');
+  var k=document.getElementById('kbsend');if(k)k.textContent=m==='say'?'說':(m==='cmd'?'執行':'設定');};
+ var _iu=Speak.initUI;Speak.initUI=function(){_iu.apply(this,arguments);try{Speak.paint();}catch(e){}};
+ window.addEventListener('load',function(){try{Speak.paint();}catch(e){}});
+ setTimeout(function(){try{if(Speak._ui)Speak.paint();}catch(e){}},50);
+ /* 說明：Act.help 附加設定劇情 */
+ if(window.Act&&Act.help){var _h=Act.help;Act.help=function(){return _h()+'\n\n【設定劇情】你是作者：以「/設定」或「/劇情」開頭（或切到📜設定模式），宣告的世界事實會成真，例如：\n・/設定 那人便是嬴政，他想結識我\n・/設定 原來李斯是呂不韋的人\n・/指令 那人便是嬴政（/指令 會自動分流到設定）';};}
+ if(window.Bond&&Bond.card){var _bc=Bond.card;Bond.card=function(id){var c=_bc(id);try{if(c&&S.flags['wantmeet_'+id]!==undefined&&S.day-S.flags['wantmeet_'+id]<90)c+='\n動機：想結識'+S.p.name+'（劇情設定）';}catch(e){}return c;};}
+ Decl.report=function(){return {on:on(),pend:!!Decl._pend};};
+})();
+
 /* ---- 99_boot.js ---- */
 /* ===== 啟動（最後載入）===== */
 boot();
