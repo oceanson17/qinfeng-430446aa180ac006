@@ -17853,6 +17853,14 @@ Thread.ok=function(a,sc,th){
  th.pend=null;
  save();
 };
+/* 外部改寫本回合（如指令執行修正）：以新場景覆寫 last 與末回合記錄，選項隨之更新 */
+Thread.fixLast=function(sc){
+ var th=T();if(!th||!sc)return;
+ var chs=[];(sc.ch||[]).forEach(function(c){if(c&&c.t&&!c.onoff)chs.push(String((c.a&&c.a.text)||c.t).replace(/^[^\u3400-\u9fffA-Za-z0-9]+\s*/,'').slice(0,40));});
+ th.last={t:clean(sc.t).slice(0,3000),sp:sc.sp||'',ch:chs};
+ var lt=th.turns[th.turns.length-1];if(lt){lt.sc=clean(sc.t).slice(0,200);lt.full=clean(sc.t).slice(0,600);}
+ try{save();}catch(e){}
+};
 /* 搶救原文：JSON 殘缺時抽出 scene 欄位，否則視為純文字敘述 */
 Thread.readable=function(raw){
  var t=String(raw||'').replace(/```(?:json)?/gi,'').replace(/^\s+|\s+$/g,'');
@@ -17955,7 +17963,7 @@ Thread.block=function(compact){
   if(ls)s+='｜對白 '+ls;
   L.push(s);
  });
- if(th.last&&th.last.t)L.push('【最後一幕】'+th.last.t.slice(0,compact?120:260)+(th.last.ch&&th.last.ch.length?'｜上次選項：'+th.last.ch.join('／'):''));
+ if(th.last&&th.last.t)L.push('【最後一幕】'+th.last.t.slice(0,compact?120:260)+(th.last.ch&&th.last.ch.length?'｜上一幕選項（已過時，僅供參考；本回合 choices 必須依新局面重寫，不可照抄）：'+th.last.ch.join('／'):''));
  var ml=[];
  th.npcs.forEach(function(i){var m=th.mem[i];if(m&&m.length){ml.push(nameOf(i)+'記得：'+m.slice(-2).map(function(x){return x.t;}).join('；').slice(0,compact?50:90));}});
  if(ml.length)L.push('【各人對此事件的記憶（須在對白中體現，如「你上次說過…」）】\n'+ml.slice(0,5).join('\n'));
@@ -18139,7 +18147,8 @@ NODES.thOffStep=function(a){
  th.turns.push({n:th.turns.length+1,d:S.day,in:pick,sc:('（離線）'+pick+res).slice(0,200),sp:id||'',lines:[],ok:1,off:1});
  if(th.turns.length>MAXT)th.turns.splice(1,1);
  if(id)note(th,id,'你（'+S.p.name+'）說：「'+pick.slice(0,40)+'」',pick);
- th.last={t:clean('你選擇了：「'+pick+'」。'+res),sp:id||'',ch:(th.last&&th.last.ch)||[]};
+ var nx={pos:['趁勢再進一步','問清對方的打算','見好就收，暫且告退'],neg:['緩和語氣，退讓一步','據理力爭','另尋他人幫忙'],ask:['追問細節','說出自己的猜測','暫且按下不問'],wait:['打破沉默，先開口','起身告辭','觀察對方的神色']}[tn]||['順著話頭往下說','換個話題試探','設法脫身'];
+ th.last={t:clean('你選擇了：「'+pick+'」。'+res),sp:id||'',ch:nx};
  th.d1=S.day;th.pend=null;
  save();
  return offScene(th,pick,res);
@@ -19929,7 +19938,11 @@ var Act=window.Act={};
   var txt=narr+fxLine(o);
   Act.record(act,reacts,txt);
   var sp=act.tg||(reacts[0]&&reacts[0].id)||'';
-  return {t:'【'+act.lab+'】\n'+txt,sp:sp,bg:S.p.spot,kind:'event',ch:[ch('……','hub'),ch('繼續說','hub')],_act:1};
+  var chs=[];
+  if(sp&&NPC[sp]&&alive(sp)&&act.k!=='flee')chs.push(ch('💬 繼續與'+NPC[sp].n+'交談','talkMenu',{id:sp}));
+  if(act.k==='selfharm'||act.k==='drink')chs.push(ch('🩹 包紮傷口，稍作休息','hub'));
+  chs.push(ch('📜 行動選單','hub'));
+  return {t:'【'+act.lab+'】\n'+txt,sp:sp,bg:S.p.spot,kind:'event',ch:chs,_act:1,_sysCh:1};
  };
 
  /* 掛鉤：自由輸入優先攔截行動 */
@@ -19986,7 +19999,10 @@ var Act=window.Act={};
   return _run(a).then(function(sc){
    try{
     if(on()&&Act._pend&&sc&&sc.t){
-     var act=Act._pend;var reacts=Act.present(act.tg).map(function(id){return Act.reactOf(id,act);});
+     var act=Act._pend;
+     var bad=Act.verify(act,sc.t);
+     if(bad){Act._pend=null;var off=Act.resolveOffline(act);off._actFix=bad;try{toast('⚠ AI 沒有照行動執行，已改用執行版本',3000);}catch(eT){}try{if(window.Thread&&Thread.fixLast)Thread.fixLast(off);}catch(eF){}return off;}
+     var reacts=Act.present(act.tg).map(function(id){return Act.reactOf(id,act);});
      /* 若 AI 完全沒提行動關鍵，補一行離線反應摘要 */
      var key=act.lab.slice(0,2);
      if(sc.t.indexOf(act.lab)<0&&!/(自刺|劍|跪|逃|出示|威脅)/.test(sc.t)){
@@ -20000,6 +20016,15 @@ var Act=window.Act={};
   },function(err){Act._pend=null;throw err;});
  };
 
+ /* 事後檢查：行動原文被當台詞引號，或被「並沒有／卻未」抵消 */
+ Act.verify=function(act,txt){
+  if(!act||act.k==='help')return '';
+  var s=String(txt||''),b=String(act.body||'').replace(/[，。！？、\s]/g,'');
+  var qs=s.match(/「([^」]*)」/g)||[];
+  for(var i=0;i<qs.length;i++){var q=qs[i].replace(/[「」，。！？、\s…—]/g,'');if(b.length>=6&&q.length>=6&&(q.indexOf(b)>=0||b.indexOf(q)>=0))return 'echo';}
+  if(/(並|卻|終究|始終|遲遲)(沒有|沒|未)(真的|真正)?(刺|拿|跪|逃|出示|拿出|喝|飲|下手|動手|拔)/.test(s.replace(/「[^」]*」/g,'')))return 'neg';
+  return '';
+ };
  Act.report=function(){return {on:on(),pend:!!Act._pend};};
 })();
 
@@ -20381,6 +20406,7 @@ var Seal=window.Seal={};
 
  /* ---------- 2) NPC 命令驅動 ---------- */
  var Ncmd=window.Ncmd={};
+ function nmx(id){return id==='p'?S.p.name:(NPC[id]?NPC[id].n:'某人');}
  DEFSET.ncmd=true;
  (function(){var i;for(i=0;i<SETSCHEMA.length;i++){if(SETSCHEMA[i][0]==='actd'||SETSCHEMA[i][0]==='seald')break;}
   if(i>=SETSCHEMA.length)i=SETSCHEMA.length;
@@ -20390,8 +20416,8 @@ var Seal=window.Seal={};
  function store(){var x=X();if(!x.ncmd)x.ncmd={ver:1,list:[],seq:1};if(!x.ncmd.list)x.ncmd.list=[];return x.ncmd;}
 
  var VERBS=[
-  {k:'kill',re:/殺害|殺死|刺殺|幹掉|拿刀殺|刀殺|弒|誅|除掉|除去|滅口|結果了/,lab:'殺'},
-  {k:'arrest',re:/拿下|鎖拿|逮捕|拘押|下獄|囚禁|抓起來|拿問/,lab:'拿捕'},
+  {k:'kill',re:/殺害|殺死|殺了|殺掉|處死|斬了|斬首|賜死|刺殺|幹掉|拿刀殺|刀殺|弒|誅|除掉|除去|滅口|結果了/,lab:'殺'},
+  {k:'arrest',re:/拿下|鎖拿|逮捕|拘押|下獄|囚禁|抓起來|拿問|押下|押入|綁了|擒下|擒住|關起來|押走/,lab:'拿捕'},
   {k:'poison',re:/毒殺|下毒|毒死|毒害/,lab:'毒殺'},
   {k:'watch',re:/監視|盯著|探查|偵察|跟蹤|暗中察/,lab:'監視'},
   {k:'summon',re:/召見|叫來|帶來|押來|請來/,lab:'召來'},
@@ -20405,7 +20431,7 @@ var Seal=window.Seal={};
   var raw=String(text).replace(/\s+/g,' ').slice(0,200);
   var t=raw.replace(/\s+/g,'');
   /* 必須有「命／令／吩咐／派人／差」等下令痕跡 */
-  if(!/(命人|派人|差人|授意|指使|命令)/.test(t)&&!/(命|令|吩咐|差|派|授意|指使|教|讓|要)我/.test(t)&&!/(命|令|吩咐).{0,6}(人|手下|門客|死士|刺客|你)/.test(t)&&!/(要|命|令|派|教|讓).{0,4}(去|把|將)/.test(t))return null;
+  if(!/(命人|派人|差人|授意|指使|命令|下令|喝令|傳令|召衛士|喚衛士)/.test(t)&&!/(命|令|吩咐|差|派|授意|指使|教|讓|要)我/.test(t)&&!/(命|令|吩咐).{0,6}(人|手下|門客|死士|刺客|你)/.test(t)&&!/(要|命|令|派|教|讓).{0,4}(去|把|將)/.test(t))return null;
   /* 排除玩家自傷等 Act 優先 */
   if(window.Act&&Act.isCmd&&Act.isCmd(raw)&&/自刺|自刎|出示|逃跑|下跪/.test(t))return null;
   var verb=null;
@@ -20430,10 +20456,13 @@ var Seal=window.Seal={};
   if(tm){to=aliasId(tm[1]);if(!to){try{var tid=mentioned(tm[1]);if(tid.length)to=tid[0];}catch(e2){}}}
   if(!to){for(var ii=0;ii<ids.length;ii++){if(ids[ii]!==from){to=ids[ii];break;}}}
   if(!to){to=aliasId(t);}
+  /* 目標是玩家：「把我拿下」「殺了我」 */
+  var tgtP=/(把|將|拿|抓|押|捕|殺|毒|囚|鎖|綁|擒|斬|處死|賜死|杖責|打)我|我(拿下|押|抓|關|囚|綁|殺)|(拿下|殺了|押走|抓起來|處死|賜死)我/.test(t);
+  if(tgtP)to='p';
   if(!from||!to)return null;
   if(from===to&&ids.length>=2){to=ids[ids.length-1];if(to===from)to=ids[0];}
-  /* 「命我」→ 命令對象是玩家 */
-  var onPlayer=/命我|令我|吩咐我|要我|派我|教我|讓我/.test(t);
+  /* 「命我」→ 命令對象是玩家（玩家受命執行） */
+  var onPlayer=!tgtP&&/命我|令我|吩咐我|要我|派我|教我|讓我/.test(t);
   var viaMinion=/命人|派人|差人|命手下|派門客|派死士|派刺客/.test(t);
   return {k:verb.k,lab:verb.lab,from:from,to:to,onPlayer:onPlayer?1:0,viaMinion:viaMinion?1:0,raw:raw,body:t.slice(0,80)};
  };
@@ -20462,7 +20491,7 @@ var Seal=window.Seal={};
   if(ids.indexOf(cmd.from)<0)ids.unshift(cmd.from);
   ids.slice(0,4).forEach(function(id){
    if(!NPC[id]||!alive(id))return;
-   if(id===cmd.from){lines.push(NPC[id].n+'沉聲下令：「'+cmd.lab+nm(cmd.to)+'。」');return;}
+   if(id===cmd.from){lines.push(NPC[id].n+'沉聲下令：「'+cmd.lab+nmx(cmd.to)+'。」');return;}
    if(id===cmd.to){lines.push(NPC[id].n+'臉色驟變。');return;}
    var st='旁觀';try{if(window.Bond&&Bond.leanOf(id)==='protect'&&(id===cmd.to||cmd.to==='p'))st='阻攔';
     else if(R(id).ha>=30)st='煽風';else if(NPC[id].hon>=65)st='勸阻';}catch(e2){}
@@ -20478,55 +20507,139 @@ var Seal=window.Seal={};
   var st=store();
   var e={i:st.seq++,d:S.day,k:cmd.k,lab:cmd.lab,from:cmd.from,to:cmd.to,onPlayer:cmd.onPlayer,via:cmd.viaMinion,verdict:verdict.do,why:verdict.why,raw:cmd.body};
   st.list.push(e);if(st.list.length>40)st.list.shift();
-  try{addLog('〔命令〕'+nm(cmd.from)+'令'+(cmd.onPlayer?'你':(cmd.viaMinion?'人':''))+cmd.lab+nm(cmd.to)+'——'+verdict.why);}catch(e0){}
-  try{addMem(cmd.from,'下令'+cmd.lab+nm(cmd.to)+'（'+verdict.why+'）');}catch(e1){}
-  try{if(window.Bond&&Bond.on()){Bond.note(cmd.from,'曾下令'+cmd.lab+nm(cmd.to));if(cmd.k==='kill')Bond.feelDelta(cmd.from,{ha:2},'殺心');}}catch(e2){}
-  try{if(window.Nom){Nom.remember(cmd.from,'下令：'+cmd.lab+nm(cmd.to),{k:'dlg',crit:1});if(alive(cmd.to))Nom.remember(cmd.to,nm(cmd.from)+'意圖'+cmd.lab+'自己',{k:'secret',crit:1});}}catch(e3){}
+  try{addLog('〔命令〕'+nm(cmd.from)+'令'+(cmd.onPlayer?'你':(cmd.viaMinion?'人':''))+cmd.lab+nmx(cmd.to)+'——'+verdict.why);}catch(e0){}
+  try{addMem(cmd.from,'下令'+cmd.lab+nmx(cmd.to)+'（'+verdict.why+'）');}catch(e1){}
+  try{if(window.Bond&&Bond.on()){Bond.note(cmd.from,'曾下令'+cmd.lab+nmx(cmd.to));if(cmd.k==='kill')Bond.feelDelta(cmd.from,{ha:2},'殺心');}}catch(e2){}
+  try{if(window.Nom){Nom.remember(cmd.from,'下令：'+cmd.lab+nmx(cmd.to),{k:'dlg',crit:1});if(alive(cmd.to))Nom.remember(cmd.to,nm(cmd.from)+'意圖'+cmd.lab+'自己',{k:'secret',crit:1});}}catch(e3){}
   /* 任務：命我執行 */
   if(cmd.onPlayer){
-   addQuest({id:'ncmd_'+e.i,t:nm(cmd.from)+'之令：'+cmd.lab+nm(cmd.to),d:nm(cmd.from)+'命你'+cmd.lab+nm(cmd.to)+'。可遵從、陽奉陰違或拒絕——後果自負。',giver:cmd.from,due:S.day+30});
+   addQuest({id:'ncmd_'+e.i,t:nm(cmd.from)+'之令：'+cmd.lab+nmx(cmd.to),d:nm(cmd.from)+'命你'+cmd.lab+nmx(cmd.to)+'。可遵從、陽奉陰違或拒絕——後果自負。',giver:cmd.from,due:S.day+30});
   }
   /* 事件線程輕記 */
-  try{if(window.Thread&&Thread.note)Thread.note(cmd.from,cmd.lab+nm(cmd.to));
+  try{if(window.Thread&&Thread.note)Thread.note(cmd.from,cmd.lab+nmx(cmd.to));
    else if(window.Thread&&Thread.memLines){/* skip */}}catch(e4){}
   /* 知情：僅下令者、目標、在場者——不全民 */
   try{
    if(window.Facts){
     var kn=[cmd.from];if(cmd.to&&cmd.to!=='p')kn.push(cmd.to);
     try{var pr=Act.present(cmd.from);pr.forEach(function(id){if(kn.indexOf(id)<0)kn.push(id);});}catch(e5){}
-    Facts.ingest([{type:'event',subject:cmd.from,object:cmd.to==='p'?'p':cmd.to,kin:'other',text:nm(cmd.from)+'意圖'+cmd.lab+(cmd.to==='p'?S.p.name:nm(cmd.to)),vis:'secret',knownBy:kn.slice(0,4),mag:cmd.k==='kill'?2:1}],{src:'free',force:1});
+    Facts.ingest([{type:'event',subject:cmd.from,object:cmd.to==='p'?'p':cmd.to,kin:'other',text:nm(cmd.from)+'意圖'+cmd.lab+(cmd.to==='p'?S.p.name:nmx(cmd.to)),vis:'secret',knownBy:kn.slice(0,4),mag:cmd.k==='kill'?2:1}],{src:'free',force:1});
    }
   }catch(e6){}
   return e;
  };
 
- Ncmd.resolveOffline=function(cmd){
-  var v=Ncmd.willObey(cmd.from,cmd);
-  var reacts=Ncmd.reactPresent(cmd);
-  var narr='你耳聞／目睹：'+cmd.body.slice(0,70)+'。\n';
-  reacts.forEach(function(l){narr+=l+'\n';});
-  var fx={days:0,st:{},rel:{}};
-  if(v.do===2&&!cmd.onPlayer&&(cmd.k==='kill'||cmd.k==='poison')&&cmd.to&&cmd.to!=='p'&&alive(cmd.to)){
-   /* 真執行：目標重傷或標記危機，不直接秒殺帝／太后於易難度 */
-   var n=NPC[cmd.to];
-   if(n.tier>=4&&SET.diff!=='hell'){narr+=nm(cmd.from)+'雖已下令，左右面面相覷，一時無人敢動手。\n';v.why='左右不敢動手';v.do=1;}
-   else{
-    fx.rel[cmd.to]={fe:10,ha:4};narr+=nm(cmd.to)+'陷入危局（'+v.why+'）。\n';
-    S.flags['ncmd_threat_'+cmd.to]=S.day;
-   }
-  }else if(v.do===1){narr+=nm(cmd.from)+'話音落下，屬下卻只是應著，並未真正動手（陽奉陰違）。\n';}
-  else{narr+=nm(cmd.from)+'的命令遭到推託：「此事……恐怕不妥。」\n';}
-  if(cmd.onPlayer)narr+='\n（你收到任務：執行或抗命。見「任務」面板。）\n';
+ /* 導演式執行：NPC 真的做出此行為 */
+ Ncmd.crimeOf=function(cmd){
+  if(S.p.disg&&!S.flags.disg_exposed)return 'deceive';
+  if(cmd.from===S.emp||cmd.from==='yingzheng')return 'deceive';
+  return 'conspire';
+ };
+ Ncmd.arrestChoices=function(cmd){
+  var kind=Ncmd.crimeOf(cmd),acc=cmd.from,lvl=2;
+  try{lvl=punBaseLvl(kind,acc,'');}catch(e){}
+  var c=[];
+  c.push(ch('🙇 叩首求情','punishGo',{kind:kind,acc:acc,partner:'',lvl:lvl,how:'beg'}));
+  c.push(ch('🤐 沉默不語','ncmdHold',{op:'silent',kind:kind,acc:acc,lvl:lvl}));
+  c.push(ch('🗣 供出實情','ncmdHold',{op:'confess',kind:kind,acc:acc,lvl:lvl}));
+  c.push(ch('🏃 設法脫身','punishGo',{kind:kind,acc:acc,partner:'',lvl:lvl,how:'flee'}));
+  try{if(punSavers(acc).length)c.push(ch('🙏 託人說情','punishGo',{kind:kind,acc:acc,partner:'',lvl:lvl,how:'saver'}));}catch(e2){}
+  return c;
+ };
+ NODES.ncmdHold=function(a){
+  var acc=a.acc,lvl=a.lvl|0,pre='';
+  if(a.op==='silent'){pre='你一言不發，任憑審問。'+nmx(acc)+'冷冷道：「骨頭倒硬。」';try{addRel(acc,'su',4,null);}catch(e){}}
+  else{pre='你將所知之事和盤托出。'+nmx(acc)+'聽罷，神色稍緩。';lvl=Math.max(0,lvl-1);
+   try{addMem(acc,S.p.name+'受審時供出實情');if(window.Nom)Nom.remember(acc,S.p.name+'受審時供出實情',{k:'told',crit:1});}catch(e2){}}
+  return punVerdict({kind:a.kind,acc:acc,partner:'',lvl:lvl,pre:pre});
+ };
+ Ncmd.exec=function(cmd,aiText){
+  var from=cmd.from,n=NPC[from]||{n:'某人'},to=cmd.to,lab=cmd.lab;
+  var v={do:2,why:cmd.onPlayer?'下令':'奉命執行'};
+  var hold=(to==='p');
+  var reacts=Ncmd.reactPresent(cmd).filter(function(l){return l.indexOf(n.n+'沉聲下令')<0;});
+  var narr='',chs=null,bg=S.p.spot,tag='命令',fx={days:0,st:{},rel:{}};
+  if(cmd.onPlayer){
+   narr=n.n+'看著你，一字一句下令：「去，'+lab+nmx(to)+'。」\n'+reacts.join('\n')+'\n（你收到任務：執行或抗命。見「任務」面板。）';
+   chs=[ch('領命','hub'),ch('查看任務','ui',{u:'quest'})];v.why='下令';
+  }else if(hold&&cmd.k==='arrest'){
+   narr=n.n+'神色一沉，改了主意：「來人，把'+S.p.name+'拿下！」\n殿外衛士應聲而入，一左一右反剪你的雙臂，將你按跪在地。鐵鏈加身，你被押往大牢候審。\n'+reacts.join('\n');
+   S.flags.ncmd_held=S.day;S.flags.ncmd_held_by=from;bg='prison';tag='被拿下';
+   try{var rg=REGIONS[S.p.region];if(rg&&rg.sub.indexOf('prison')>=0&&S.p.spot!=='prison'){S.flags.ncmd_held_spot=S.p.spot;S.p.spot='prison';}}catch(eS){}
+   try{if(window.Canon)Canon.note('被'+n.n+'下令拿下，押入大牢（'+dateStr()+'）');}catch(e){}
+   try{addRel(from,'su',6,null);}catch(e1){}
+   chs=Ncmd.arrestChoices(cmd);
+  }else if(hold&&(cmd.k==='kill'||cmd.k==='poison')){
+   narr=n.n+'眼中殺意一閃：「'+(cmd.k==='poison'?'賜酒':'拖下去，斬')+'。」\n衛士上前將你按倒在地，鐵鏈鎖住手腳，押入死牢待決。\n'+reacts.join('\n');
+   S.flags.ncmd_held=S.day;S.flags.ncmd_held_by=from;
+   Ncmd.record(cmd,v);
+   var sc0=punLast({kind:'treason',acc:from,partner:'',pre:'【'+lab+'】\n'+(aiText||narr)});
+   sc0._ncmd=1;sc0.tag='死牢';return sc0;
+  }else if(hold){
+   narr=n.n+'下令'+lab+'你，左右立即照辦。\n'+reacts.join('\n');S.flags['ncmd_'+cmd.k+'_p']=S.day;
+   if(cmd.k==='watch')S.flags['watch_'+from]=S.day;
+   chs=[ch('💬 向'+n.n+'辯白','talkMenu',{id:from}),ch('📜 行動選單','hub')];
+  }else if(cmd.k==='kill'||cmd.k==='poison'){
+   var tn=NPC[to];
+   narr=n.n+'一聲令下，'+(cmd.viaMinion?'手下':'左右')+'持刃'+(cmd.k==='poison'?'暗中下毒於':'撲向')+tn.n+'。\n';
+   var dead=false;
+   if(tn.tier<=2&&rollD(55)){try{killNpc(to,'被'+n.n+'派人所殺',from);dead=true;}catch(e2){}}
+   if(dead)narr+=tn.n+'當場殞命。\n';
+   else{narr+=tn.n+'身受重傷，被拚死護住，僥倖未死。\n';S.flags['ncmd_wounded_'+to]=S.day;fx.rel[to]={fe:10,ha:4};
+    try{addMem(to,'遭'+n.n+'派人行刺，重傷');}catch(e3){}}
+   narr+=reacts.join('\n');
+  }else if(cmd.k==='arrest'){
+   narr=n.n+'下令拿下'+nmx(to)+'，衛士立即上前，將其鎖拿押入大牢。\n'+reacts.join('\n');S.flags['jailed_'+to]=S.day;
+   try{addMem(to,'被'+n.n+'下令拿下');}catch(e4){}
+  }else{
+   narr=n.n+'下令'+lab+nmx(to)+'，左右立即照辦。\n'+reacts.join('\n');S.flags['ncmd_'+cmd.k+'_'+to]=S.day;
+  }
   var o=applyFx(fx);
   Ncmd.record(cmd,v);
-  narr+=fxLine(o);
-  return {t:'【命令・'+cmd.lab+'】\n'+narr,sp:cmd.from,bg:S.p.spot,kind:'event',ch:[ch('……','hub'),ch('查看任務','ui',{u:'quest'})],_ncmd:1};
+  if(!chs)chs=[ch('💬 繼續','talkMenu',{id:from}),ch('📜 行動選單','hub')];
+  var body=(aiText?aiText:'【命令・'+lab+'】\n'+narr)+fxLine(o);
+  if(aiText&&hold&&cmd.k==='arrest')body+='\n\n〔你已被拿下，押候審問〕';
+  return {t:body,sp:from,bg:bg,kind:'event',ch:chs,_ncmd:1,_sysCh:1,tag:tag,ai:aiText?1:0};
+ };
+ Ncmd.resolveOffline=function(cmd){return Ncmd.exec(cmd);};
+ /* 被拿下後：獲釋（非牢獄結果）時還原地點、清除羈押旗標 */
+ ['punDo','punishGo','punJailAct','punLastGo','ncmdHold'].forEach(function(k){
+  var o=NODES[k];if(!o)return;
+  NODES[k]=function(a){
+   var sc=o.apply(this,arguments);
+   try{var still=sc&&(sc.kind==='loading'||sc.async||sc.kind==='ending'||(sc.ch||[]).some(function(c){return /^(punJail|punJailAct|punLastGo|punDo|punishGo|ncmdHold|endingGo)$/.test(c.go);}));
+    if(S.flags.ncmd_held&&sc&&!still){
+    if(S.p.spot==='prison'&&S.flags.ncmd_held_spot){S.p.spot=S.flags.ncmd_held_spot;if(sc.bg==='prison')sc.bg=S.p.spot;}
+    delete S.flags.ncmd_held;delete S.flags.ncmd_held_spot;}}catch(e){}
+   return sc;
+  };
+ });
+ /* 事後檢查 AI 敘述是否真執行 */
+ Ncmd.verify=function(cmd,txt){
+  var t=String(txt||''),outside=t.replace(/「[^」]*」|『[^』]*』/g,'');
+  var why=[];
+  var m=cmd.body.match(/(命人|派人|差人|下令|喝令|傳令|命令|命|令).*/);var phrase=(m?m[0]:cmd.body).replace(/[，。！？、\s]/g,'');
+  var qs=t.match(/「([^」]*)」/g)||[];
+  var vre=null;for(var i=0;i<VERBS.length;i++){if(VERBS[i].k===cmd.k){vre=VERBS[i].re;break;}}
+  var shortEcho=false;
+  qs.forEach(function(q){var s=q.replace(/[「」，。！？、\s…—]/g,'');if(!s)return;
+   if(phrase.length>=3&&(s.indexOf(phrase)>=0||phrase.indexOf(s)>=0&&s.length>=4))why.push('echo');
+   else if(vre&&s.length<=4&&vre.test(s))shortEcho=true;});
+  var NEG=/(卻|並|也|始終|遲遲|終究|仍)(沒有|沒|未|不曾)|並未|沒有立刻|沒有喚|不拿你|不拿下|不殺你|饒你一命|收回成命|作罷|按兵不動|紋絲不動|不必拿|今日.{0,4}不拿/;
+  if(NEG.test(cmd.to==='p'?t:outside))why.push('neg');
+  var EV=null;
+  if(cmd.k==='arrest')EV=/(衛士|侍衛|甲士|禁衛|左右|郎衛|獄卒|兵士|衛卒).{0,12}(上前|撲|按|架|擒|拿|押|鎖|綁|拖|扣)|被(拿下|押|擒|按|鎖|綁|架)|押(入|往|下|走|赴)|鐐銬|枷|反剪|鎖鏈|鐵鏈|下獄|大牢/;
+  else if(cmd.k==='kill'||cmd.k==='poison')EV=/(刺|砍|斬|劍|刀|毒|血|倒地|斃|殞|重傷|遇刺|殺)/;
+  if(EV&&!cmd.onPlayer&&!EV.test(outside))why.push('noexec');
+  if(shortEcho&&EV&&!EV.test(outside))why.push('echo');
+  return {ok:!why.length,why:why};
  };
 
  Ncmd.aiBlock=function(cmd){
   if(!cmd)return '';
-  return '\n◆NPC 命令（硬規則）：劇情中 '+NPC[cmd.from].n+' 正對'+(cmd.onPlayer?'玩家':nm(cmd.to))+'下達「'+cmd.lab+'」之令（'+cmd.body.slice(0,60)+'）。'+
-   '須寫出下令場景與在場反應；是否真執行須符合性格與利害（可決意執行／陽奉陰違／拒絕）。'+
+  return '\n◆NPC 命令（硬規則）：劇情中 '+NPC[cmd.from].n+' 正對'+(cmd.onPlayer?'玩家':nmx(cmd.to))+'下達「'+cmd.lab+'」之令（'+cmd.body.slice(0,60)+'）。'+
+   (cmd.onPlayer?'須寫出下令場景與在場反應；玩家可自行決定是否遵從。':
+   '這是玩家以「導演」身分描述的劇情：'+NPC[cmd.from].n+'必須真的做出此行為並寫出結果（例如下令拿下→衛士上前把人押下、上鐐、押往大牢）。嚴禁把指令文字原樣寫成台詞引號；嚴禁寫「卻沒有／並未／終究沒有」等抵消執行；choices 必須按執行後的新局面重寫（如被押下後：求情／沉默／供出／設法脫身），不得沿用上一幕選項。')+
    '知情範圍僅限下令者、對象與在場者，禁止無故傳遍全城。effects 可用 quest 記錄「命玩家執行」。';
  };
 
@@ -20563,7 +20676,7 @@ var Seal=window.Seal={};
  var _wr=AI.worldRules;
  AI.worldRules=function(short){
   var t=_wr(short);
-  try{if(on())t+=short?'【NPC命令】「X命人殺Y／命我……」須寫下令與反應，知情範圍受限。':'【NPC 命令驅動】玩家可描述他人下令（如「呂不韋命人拿刀殺太后」「嬴政要我監視李斯」）。解析下令者、命令、目標；寫入任務／記憶；在場反應；按性格與難度決意執行、陽奉陰違或拒絕。禁止無故全民知情。';}catch(e){}
+  try{if(on())t+=short?'【NPC命令】玩家描述的 NPC 行為必須真的執行（不可引號複述指令、不可「卻沒有」），選項按新局面重寫。':'【NPC 命令驅動】玩家可描述他人下令（如「呂不韋命人拿刀殺太后」「嬴政要我監視李斯」）。解析下令者、命令、目標；寫入任務／記憶；在場反應；若是玩家以導演身分描述 NPC 行為（如「嬴政改變主意，命人把我拿下」），該 NPC 必須真的執行並寫出後果，不可把指令原文當台詞引號、不可寫成「卻沒有」而抵消；之後的選項按新局面重寫。禁止無故全民知情。';}catch(e){}
   return t;
  };
  var _run=AI.run;
@@ -20571,16 +20684,53 @@ var Seal=window.Seal={};
   return _run(a).then(function(sc){
    try{
     if(on()&&Ncmd._pend&&sc){
-     var cmd=Ncmd._pend;var v=Ncmd.willObey(cmd.from,cmd);
-     Ncmd.record(cmd,v);
-     if(sc.t&&sc.t.indexOf(cmd.lab)<0)sc.t+='\n'+Ncmd.reactPresent(cmd).slice(0,2).join('\n');
-     Ncmd._pend=null;
+     var cmd=Ncmd._pend;Ncmd._pend=null;
+     var chk=Ncmd.verify(cmd,sc.t);
+     if(!chk.ok){
+      var sc2=Ncmd.exec(cmd);sc2._ncmdFix=chk.why.join(',');
+      try{if(window.Thread&&Thread.fixLast)Thread.fixLast(sc2);}catch(e2){}
+      try{toast('⚠ AI 沒有照指令執行（'+chk.why.join('／')+'），已改用執行版本',3200);}catch(e1){}
+      return sc2;
+     }
+     if(cmd.to==='p'&&!cmd.onPlayer&&(cmd.k==='arrest'||cmd.k==='kill'||cmd.k==='poison')){
+      var scP=Ncmd.exec(cmd,sc.t);  /* 敘述用 AI，狀態與選項接刑罰系統 */
+      try{if(window.Thread&&Thread.fixLast)Thread.fixLast(scP);}catch(e3){}
+      return scP;
+     }
+     var sc3=Ncmd.exec(cmd,sc.t);
+     if(sc.ch&&sc.ch.length){sc3.ch=sc.ch;sc3._sysCh=0;}
+     if(sc.bg)sc3.bg=sc.bg;if(sc.sp)sc3.sp=sc.sp;
+     sc3.ai=1;return sc3;
     }
    }catch(e){Ncmd._pend=null;}
    return sc;
   },function(err){Ncmd._pend=null;throw err;});
  };
 
+ /* 選項刷新保險：AI／指令新幕若沿用上一幕 ≥2 個相同選項，改為依新局面重生 */
+ var _lastCh=null;
+ var _presSt=present;
+ present=function(sc,opt){
+  try{
+   if(sc&&typeof sc==='object'&&!sc.async&&sc.ch&&S&&sc!==S.scene){
+    var k=sc.kind;
+    if(k!=='loading'&&k!=='menu'&&k!=='hub'&&k!=='ending'){
+     var pv=S.scene;_lastCh=(pv&&pv.ch&&pv.kind!=='loading')?pv.ch.map(function(c){return String(c.t||'').replace(/^[^\u3400-\u9fffA-Za-z0-9]+\s*/,'');}):null;
+     if((sc.ai||sc._ncmd||sc._act)&&!sc._sysCh&&_lastCh&&_lastCh.length){
+      var dup=0,keep=[];
+      sc.ch.forEach(function(c){var tt=String(c.t||'').replace(/^[^\u3400-\u9fffA-Za-z0-9]+\s*/,'');if(_lastCh.indexOf(tt)>=0&&tt.length>=3)dup++;else keep.push(c);});
+      if(dup>=2){
+       var sp=sc.sp;
+       if(sp&&NPC[sp]&&alive(sp))keep.push(ch('💬 繼續與'+NPC[sp].n+'交談','talkMenu',{id:sp}));
+       keep.push(ch('📜 行動選單','hub'));
+       sc.ch=keep;sc._chRefresh=dup;
+      }
+     }
+    }
+   }
+  }catch(e){}
+  return _presSt(sc,opt);
+ };
  Ncmd.report=function(){return {n:store().list.length,last:store().list.slice(-1)[0]||null};};
 })();
 
